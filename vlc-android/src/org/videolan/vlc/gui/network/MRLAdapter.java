@@ -20,7 +20,6 @@
  *****************************************************************************/
 package org.videolan.vlc.gui.network;
 
-import android.net.Uri;
 import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -40,12 +39,12 @@ class MRLAdapter extends RecyclerView.Adapter<MRLAdapter.ViewHolder> {
     }
 
     public class ViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener {
-        final TextView uriTv, titleTv;
+        TextView uriTv, titleTv;
 
         public ViewHolder(View v) {
             super(v);
-            uriTv = v.findViewById(R.id.mrl_item_uri);
-            titleTv = v.findViewById(R.id.mrl_item_title);
+            uriTv = (TextView) v.findViewById(R.id.mrl_item_uri);
+            titleTv = (TextView) v.findViewById(R.id.mrl_item_title);
             itemView.setOnClickListener(this);
         }
 
@@ -70,8 +69,8 @@ class MRLAdapter extends RecyclerView.Adapter<MRLAdapter.ViewHolder> {
     @Override
     public void onBindViewHolder(final ViewHolder holder, int position) {
         final HistoryItem item = mDataset[position];
-        holder.uriTv.setText(Uri.decode(item.getMrl()));
-        holder.titleTv.setText(Uri.decode(item.getTitle()));
+        holder.uriTv.setText(item.getMrl());
+        holder.titleTv.setText(item.getTitle());
     }
 
     public void setList(HistoryItem[] list){

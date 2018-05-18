@@ -6,6 +6,7 @@ import android.os.Environment;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
+import org.videolan.libvlc.util.VLCUtil;
 import org.videolan.medialibrary.media.MediaLibraryItem;
 import org.videolan.medialibrary.media.MediaWrapper;
 
@@ -37,7 +38,8 @@ public class Tools {
     }
     public static String getProgressText(MediaWrapper media) {
         long lastTime = media.getTime();
-        if (lastTime == 0L) return "";
+        if (lastTime == 0L)
+            return "";
         return String.format("%s / %s",
                 millisToString(lastTime, true, false),
                 millisToString(media.getLength(), true, false));
@@ -69,24 +71,26 @@ public class Tools {
 
     public static void setMediaDescription (MediaLibraryItem item) {
         if (item.getItemType() == MediaLibraryItem.TYPE_MEDIA) {
-            final MediaWrapper mw = (MediaWrapper) item;
+            MediaWrapper mw = (MediaWrapper) item;
             if (mw.getType() == MediaWrapper.TYPE_VIDEO) {
-                final String progress = mw.getLength() == 0L ? null : mw.getTime() == 0L ? Tools.millisToString(mw.getLength()) : getProgressText(mw);
-                final String resolution = getResolution(mw);
+                String progress = getProgressText(mw);
+                String resolution = getResolution(mw);
                 boolean hasprogress = !TextUtils.isEmpty(progress), hasResolution = !TextUtils.isEmpty(resolution);
-                final StringBuilder sb = new StringBuilder();
-                if (hasprogress && hasResolution) sb.append(resolution).append(" - ").append(progress);
-                else if (hasprogress) sb.append(progress);
-                else sb.append(resolution);
-                item.setDescription(sb.toString());
+                if (hasprogress && hasResolution)
+                    item.setDescription(resolution+" - "+progress);
+                else if (hasprogress)
+                    item.setDescription(progress);
+                else
+                    item.setDescription(resolution);
             } else if (mw.getType() == MediaWrapper.TYPE_AUDIO) {
-                final String artist = mw.getReferenceArtist(), album = mw.getAlbum();
-                final StringBuilder sb = new StringBuilder();
+                String artist = mw.getReferenceArtist(), album = mw.getAlbum();
                 boolean hasArtist = !TextUtils.isEmpty(artist), hasAlbum = !TextUtils.isEmpty(album);
-                if (hasArtist && hasAlbum) sb.append(album).append(" - ").append(artist);
-                else if (hasArtist) sb.append(artist);
-                else sb.append(album);
-                item.setDescription(sb.toString());
+                if (hasArtist && hasAlbum)
+                    item.setDescription(album+" - "+artist);
+                else if (hasArtist)
+                    item.setDescription(artist);
+                else
+                    item.setDescription(album);
             }
         }
     }
@@ -122,7 +126,8 @@ public class Tools {
     }
 
     public static String encodeVLCMrl(String mrl) {
-        if (mrl.startsWith("/")) mrl = "file://"+mrl;
-        return Uri.encode(Uri.decode(mrl), ".-_~/()&!$*+,;='@:");
+        if (mrl.startsWith("/"))
+            mrl = "file://"+mrl;
+        return VLCUtil.encodeVLCString(mrl);
     }
 }

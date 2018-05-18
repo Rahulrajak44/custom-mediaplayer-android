@@ -1,19 +1,14 @@
 package org.videolan.vlc.gui;
 
-import android.app.Activity;
-import android.os.AsyncTask;
 import android.os.Bundle;
-import android.util.Log;
 import android.widget.TextView;
 
 import org.videolan.libvlc.util.VLCUtil;
 import org.videolan.vlc.R;
+import org.videolan.vlc.VLCApplication;
+import org.videolan.vlc.config.Config;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
-public class CompatErrorActivity extends Activity {
+public class CompatErrorActivity extends BaseActivity {
     public final static String TAG = "VLC/CompatErrorActivity";
 
     /**
@@ -28,13 +23,15 @@ public class CompatErrorActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.not_compatible);
+        TextView tvo = (TextView)findViewById(R.id.message);
+        Config config = ((VLCApplication)getApplication()).getConfig();
 
+        tvo.setText(getString(R.string.error_not_compatible, config.getAppName()));
         String errorMsg = VLCUtil.getErrorMsg();
         if(getIntent().getBooleanExtra("runtimeError", false))
             if(getIntent().getStringExtra("message") != null) {
                 errorMsg = getIntent().getStringExtra("message");
-                TextView tvo = (TextView)findViewById(R.id.message);
-                tvo.setText(R.string.error_problem);
+                tvo.setText(getString(R.string.error_problem, config.getAppName()));
             }
 
         TextView tv = (TextView)findViewById(R.id.errormsg);

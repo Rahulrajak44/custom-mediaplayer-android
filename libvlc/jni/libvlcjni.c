@@ -30,7 +30,7 @@
 
 #include <vlc/vlc.h>
 
-#include "jniloader.h"
+#include <jni.h>
 
 #include <android/api-level.h>
 
@@ -39,6 +39,8 @@
 #include "std_logger.h"
 
 struct fields fields;
+
+#define VLC_JNI_VERSION JNI_VERSION_1_2
 
 #define THREAD_NAME "libvlcjni"
 JNIEnv *jni_get_env(const char *name);
@@ -97,9 +99,14 @@ JNIEnv *jni_get_env(const char *name)
 static std_logger *p_std_logger = NULL;
 #endif
 
-int VLCJNI_OnLoad(JavaVM *vm, JNIEnv* env)
+jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
+    JNIEnv* env = NULL;
+    // Keep a reference on the Java VM.
     myVm = vm;
+
+    if ((*vm)->GetEnv(vm, (void**) &env, VLC_JNI_VERSION) != JNI_OK)
+        return -1;
 
     /* Create a TSD area and setup a destroy callback when a thread that
      * previously set the jni_env_key is canceled or exited */
@@ -175,10 +182,6 @@ int VLCJNI_OnLoad(JavaVM *vm, JNIEnv* env)
               "org/videolan/libvlc/MediaDiscoverer", true);
     GET_CLASS(fields.MediaDiscoverer.Description.clazz,
               "org/videolan/libvlc/MediaDiscoverer$Description", true);
-    GET_CLASS(fields.RendererDiscoverer.clazz,
-              "org/videolan/libvlc/RendererDiscoverer", true);
-    GET_CLASS(fields.RendererDiscoverer.Description.clazz,
-              "org/videolan/libvlc/RendererDiscoverer$Description", true);
     GET_CLASS(fields.Dialog.clazz,
               "org/videolan/libvlc/Dialog", true);
 
@@ -282,20 +285,6 @@ int VLCJNI_OnLoad(JavaVM *vm, JNIEnv* env)
            "Lorg/videolan/libvlc/MediaDiscoverer$Description;");
 
     GET_ID(GetStaticMethodID,
-           fields.RendererDiscoverer.createDescriptionFromNativeID,
-           fields.RendererDiscoverer.clazz,
-           "createDescriptionFromNative",
-           "(Ljava/lang/String;Ljava/lang/String;)"
-           "Lorg/videolan/libvlc/RendererDiscoverer$Description;");
-
-    GET_ID(GetStaticMethodID,
-           fields.RendererDiscoverer.createItemFromNativeID,
-           fields.RendererDiscoverer.clazz,
-           "createItemFromNative",
-           "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IJ)"
-           "Lorg/videolan/libvlc/RendererItem;");
-
-    GET_ID(GetStaticMethodID,
            fields.Dialog.displayErrorFromNativeID,
            fields.Dialog.clazz,
            "displayErrorFromNative",
@@ -338,11 +327,17 @@ int VLCJNI_OnLoad(JavaVM *vm, JNIEnv* env)
 #undef GET_CLASS
 #undef GET_ID
 
-    return 0;
+    LOGD("JNI interface loaded.");
+    return VLC_JNI_VERSION;
 }
 
-void VLCJNI_OnUnload(JavaVM *vm, JNIEnv *env)
+void JNI_OnUnload(JavaVM* vm, void* reserved)
 {
+    JNIEnv* env = NULL;
+
+    if ((*vm)->GetEnv(vm, (void**) &env, VLC_JNI_VERSION) != JNI_OK)
+        return;
+
     (*env)->DeleteGlobalRef(env, fields.IllegalStateException.clazz);
     (*env)->DeleteGlobalRef(env, fields.IllegalArgumentException.clazz);
     (*env)->DeleteGlobalRef(env, fields.String.clazz);

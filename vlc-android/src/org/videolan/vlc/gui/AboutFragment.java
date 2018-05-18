@@ -26,19 +26,22 @@ import android.support.design.widget.TabLayout;
 import android.support.v4.app.Fragment;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.AppCompatActivity;
+import android.text.Html;
+import android.text.method.LinkMovementMethod;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
+import android.widget.TextView;
 
 import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.vlc.BuildConfig;
 import org.videolan.vlc.R;
 import org.videolan.vlc.VLCApplication;
+import org.videolan.vlc.config.Config;
 import org.videolan.vlc.gui.audio.AudioPagerAdapter;
 import org.videolan.vlc.gui.helpers.UiTools;
 import org.videolan.vlc.util.Util;
-import org.videolan.vlc.util.WorkersKt;
 
 public class AboutFragment extends Fragment {
     public final static String TAG = "VLC/AboutActivity";
@@ -58,8 +61,11 @@ public class AboutFragment extends Fragment {
     @Override
     public void onViewCreated(final View v, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(v, savedInstanceState);
+
+        final Config config = ((VLCApplication)getActivity().getApplication()).getConfig();
+
         if (getActivity() instanceof AppCompatActivity)
-            ((AppCompatActivity) getActivity()).getSupportActionBar().setTitle("VLC " + BuildConfig.VERSION_NAME);
+            ((AppCompatActivity) getActivity()).getSupportActionBar().setTitle(config.getAppName()+" " + BuildConfig.VERSION_NAME);
         //Fix android 7 Locale problem with webView
         //https://stackoverflow.com/questions/40398528/android-webview-locale-changes-abruptly-on-android-n
         if (AndroidUtil.isNougatOrLater)
@@ -78,14 +84,23 @@ public class AboutFragment extends Fragment {
         mViewPager.setAdapter(new AudioPagerAdapter(lists, titles));
 
         mTabLayout = v.findViewById(R.id.sliding_tabs);
+        mTabLayout.setBackgroundColor(((VLCApplication)getActivity().getApplication()).getConfig().getColorPrimary());
         mTabLayout.setupWithViewPager(mViewPager);
-        WorkersKt.runBackground(new Runnable() {
+        VLCApplication.runBackground(new Runnable() {
             @Override
             public void run() {
-                final String asset = Util.readAsset("licence.htm", "").replace("!COMMITID!",revision);
-                WorkersKt.runOnMainThread(new Runnable() {
+                final String asset = Util.readAsset("licence.htm", "").replace("!COMMITID!",revision).replace("VLC for Android", config.getAppName());
+                VLCApplication.runOnMainThread(new Runnable() {
                     @Override
                     public void run() {
+                        final TextView link = v.findViewById(R.id.about_text);
+                        link.setText(VLCApplication.getAppResources().getString(R.string.about_text, config.getAppName(), BuildConfig.VERSION_NAME));
+
+
+
+                        final TextView link2 = v.findViewById(R.id.main_link);
+                        link2.setMovementMethod(LinkMovementMethod.getInstance());
+                        link2.append(Html.fromHtml(VLCApplication.getAppResources().getString(R.string.about_link, VLCApplication.getAppResources().getString(R.string.widgetID))));
                         UiTools.fillAboutView(v);
                         webView.loadData(asset, "text/html", "UTF8");
                     }

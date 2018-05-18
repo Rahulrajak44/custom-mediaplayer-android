@@ -21,14 +21,11 @@
  */
 
 package org.videolan.vlc.gui.tv.preferences;
-
 import android.annotation.TargetApi;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.v7.preference.CheckBoxPreference;
 
-import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.libvlc.util.HWDecoderUtil;
 import org.videolan.vlc.R;
 import org.videolan.vlc.util.VLCInstance;
@@ -52,23 +49,15 @@ public class PreferencesAudio extends BasePreferenceFragment implements SharedPr
 
         findPreference("enable_headset_detection").setVisible(false);
         findPreference("enable_play_on_headset_insertion").setVisible(false);
+        findPreference("enable_steal_remote_control").setVisible(false);
         findPreference("headset_prefs_category").setVisible(false);
         findPreference("lockscreen_cover").setVisible(false);
-        findPreference("audio_ducking").setVisible(!AndroidUtil.isOOrLater);
 
         final HWDecoderUtil.AudioOutput aout = HWDecoderUtil.getAudioOutputFromDevice();
         if (aout != HWDecoderUtil.AudioOutput.ALL) {
             /* no AudioOutput choice */
             findPreference("aout").setVisible(false);
         }
-        updatePassThroughSummary();
-        final boolean opensles = "1".equals(getPreferenceManager().getSharedPreferences().getString("aout", "0"));
-        if (opensles) findPreference("audio_digital_output").setVisible(false);
-    }
-
-    private void updatePassThroughSummary() {
-        final boolean pt = getPreferenceManager().getSharedPreferences().getBoolean("audio_digital_output", false);
-        findPreference("audio_digital_output").setSummary(pt ? R.string.audio_digital_output_enabled : R.string.audio_digital_output_disabled);
     }
 
     @Override
@@ -83,10 +72,8 @@ public class PreferencesAudio extends BasePreferenceFragment implements SharedPr
         switch (key){
             case "aout":
                 VLCInstance.restart();
-                if (getActivity() != null ) ((PreferencesActivity)getActivity()).restartMediaPlayer();
-                final boolean opensles = "1".equals(getPreferenceManager().getSharedPreferences().getString("aout", "0"));
-                if (opensles) ((CheckBoxPreference)findPreference("audio_digital_output")).setChecked(false);
-                findPreference("audio_digital_output").setVisible(!opensles);
+                if (getActivity() != null )
+                    ((PreferencesActivity)getActivity()).restartMediaPlayer();
         }
     }
 }

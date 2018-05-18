@@ -20,12 +20,13 @@
 package org.videolan.vlc.gui;
 
 import android.annotation.TargetApi;
-import android.arch.lifecycle.Observer;
-import android.arch.lifecycle.ViewModelProviders;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
+import android.os.Handler;
+import android.os.Message;
 import android.support.v7.view.ActionMode;
+import android.support.v7.view.StandaloneActionMode;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
@@ -35,28 +36,30 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
+import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.medialibrary.media.MediaLibraryItem;
 import org.videolan.medialibrary.media.MediaWrapper;
 import org.videolan.vlc.R;
+import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.gui.browser.MediaBrowserFragment;
-import org.videolan.vlc.gui.helpers.UiTools;
 import org.videolan.vlc.gui.view.SwipeRefreshLayout;
 import org.videolan.vlc.interfaces.IEventsHandler;
 import org.videolan.vlc.interfaces.IHistory;
 import org.videolan.vlc.interfaces.IRefreshable;
 import org.videolan.vlc.media.MediaUtils;
-import org.videolan.vlc.media.PlaylistManager;
-import org.videolan.vlc.viewmodels.HistoryProvider;
 
+import java.lang.reflect.Field;
 import java.util.List;
 
-public class HistoryFragment extends MediaBrowserFragment<HistoryProvider> implements IRefreshable, IHistory, SwipeRefreshLayout.OnRefreshListener, IEventsHandler {
+public class HistoryFragment extends MediaBrowserFragment implements IRefreshable, IHistory, SwipeRefreshLayout.OnRefreshListener, IEventsHandler {
 
     public final static String TAG = "VLC/HistoryFragment";
 
+    private static final int UPDATE_LIST = 0;
+
     private HistoryAdapter mHistoryAdapter;
-    private View mEmptyView;
     private RecyclerView mRecyclerView;
+    private View mEmptyView;
 
     /* All subclasses of Fragment must include a public empty constructor. */
     public HistoryFragment() {
@@ -66,41 +69,24 @@ public class HistoryFragment extends MediaBrowserFragment<HistoryProvider> imple
     @Override
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState){
-        return inflater.inflate(R.layout.history_list, container, false);
-    }
 
-    @Override
-    public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
-        mEmptyView = view.findViewById(android.R.id.empty);
-        mRecyclerView = view.findViewById(android.R.id.list);
-        mProvider = ViewModelProviders.of(requireActivity()).get(HistoryProvider.class);
-        mProvider.getDataset().observe(this, new Observer<List<MediaWrapper>>() {
-            @Override
-            public void onChanged(@Nullable List<MediaWrapper> mediaWrappers) {
-                if (mediaWrappers != null) mHistoryAdapter.update(mediaWrappers);
-            }
-        });
-    }
-
-    @Override
-    public void onStart() {
-        super.onStart();
-        mProvider.refresh();
-    }
-
-    @Override
-    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
+        View v = inflater.inflate(R.layout.history_list, container, false);
+        mRecyclerView = (RecyclerView)v.findViewById(android.R.id.list);
+        mEmptyView = v.findViewById(android.R.id.empty);
         mRecyclerView.setLayoutManager(new LinearLayoutManager(getActivity()));
         mRecyclerView.setAdapter(mHistoryAdapter);
         mRecyclerView.setNextFocusUpId(R.id.ml_menu_search);
         mRecyclerView.setNextFocusLeftId(android.R.id.list);
         mRecyclerView.setNextFocusRightId(android.R.id.list);
-        mRecyclerView.setNextFocusForwardId(android.R.id.list);
+        if (AndroidUtil.isHoneycombOrLater)
+            mRecyclerView.setNextFocusForwardId(android.R.id.list);
         mRecyclerView.requestFocus();
         registerForContextMenu(mRecyclerView);
+        mHistoryAdapter.setConfig(config);
+        mSwipeRefreshLayout = (SwipeRefreshLayout) v.findViewById(R.id.swipeLayout);
+
         mSwipeRefreshLayout.setOnRefreshListener(this);
+        return v;
     }
 
     @Override
@@ -127,12 +113,32 @@ public class HistoryFragment extends MediaBrowserFragment<HistoryProvider> imple
     }
 
     @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden && mReadyToDisplay && mHistoryAdapter.isEmpty())
+            display();
+
+    }
+
+    @Override
     public void refresh() {
-        mProvider.refresh();
+        VLCApplication.runBackground(new Runnable() {
+            @Override
+            public void run() {
+                MediaWrapper[] list = VLCApplication.getMLInstance().lastMediaPlayed();
+                mHandler.obtainMessage(UPDATE_LIST, list).sendToTarget();
+            }
+        });
     }
 
     @Override
     public void onRefresh() {
+        refresh();
+    }
+
+    @Override
+    public void display() {
+        mReadyToDisplay = true;
         refresh();
     }
 
@@ -143,13 +149,29 @@ public class HistoryFragment extends MediaBrowserFragment<HistoryProvider> imple
 
     public void clear(){}
 
+    Handler mHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what){
+                case UPDATE_LIST:
+                    if (getActivity() == null)
+                        return;
+                    mHistoryAdapter.setList((MediaWrapper[]) msg.obj);
+                    updateEmptyView();
+                    mHistoryAdapter.notifyDataSetChanged();
+                    mSwipeRefreshLayout.setRefreshing(false);
+                    getActivity().supportInvalidateOptionsMenu();
+            }
+        }
+    };
+
     private void updateEmptyView() {
         if (mHistoryAdapter.isEmpty()){
-            mSwipeRefreshLayout.setVisibility(View.GONE);
+            mRecyclerView.setVisibility(View.GONE);
             mEmptyView.setVisibility(View.VISIBLE);
         } else {
             mEmptyView.setVisibility(View.GONE);
-            mSwipeRefreshLayout.setVisibility(View.VISIBLE);
+            mRecyclerView.setVisibility(View.VISIBLE);
         }
     }
 
@@ -160,7 +182,7 @@ public class HistoryFragment extends MediaBrowserFragment<HistoryProvider> imple
     @Override
     public void clearHistory() {
         mMediaLibrary.clearHistory();
-        mProvider.clear();
+        mHistoryAdapter.clear();
         updateEmptyView();
     }
 
@@ -177,9 +199,22 @@ public class HistoryFragment extends MediaBrowserFragment<HistoryProvider> imple
             stopActionMode();
             return false;
         }
+        setActionModeBackgroundColor(mode, config.getColorPrimary());
         menu.findItem(R.id.action_history_info).setVisible(selectionCount == 1);
-        menu.findItem(R.id.action_history_append).setVisible(PlaylistManager.Companion.hasMedia());
+        menu.findItem(R.id.action_history_play).setVisible(AndroidUtil.isHoneycombOrLater || selectionCount == 1);
+        menu.findItem(R.id.action_history_append).setVisible(mService.hasMedia() && AndroidUtil.isHoneycombOrLater);
         return true;
+    }
+
+    public static void setActionModeBackgroundColor(ActionMode actionMode, int color) {
+        try {
+            StandaloneActionMode standaloneActionMode = (StandaloneActionMode) actionMode;
+            Field mContextView = StandaloneActionMode.class.getDeclaredField("mContextView");
+            mContextView.setAccessible(true);
+            Object value = mContextView.get(standaloneActionMode);
+            ((View) value).setBackground(new ColorDrawable(color));
+        } catch (Throwable ignore) {
+        }
     }
 
     @Override
@@ -209,7 +244,7 @@ public class HistoryFragment extends MediaBrowserFragment<HistoryProvider> imple
     public void onDestroyActionMode(ActionMode mode) {
         mActionMode = null;
         int index = -1;
-        for (MediaWrapper media : mProvider.getDataset().getValue()) {
+        for (MediaWrapper media : mHistoryAdapter.getAll()) {
             ++index;
             if (media.hasStateFlags(MediaLibraryItem.FLAG_SELECTED)) {
                 media.removeStateFlags(MediaLibraryItem.FLAG_SELECTED);
@@ -226,13 +261,20 @@ public class HistoryFragment extends MediaBrowserFragment<HistoryProvider> imple
             invalidateActionMode();
             return;
         }
-        if (position != 0) mProvider.moveUp((MediaWrapper) item);
+
+        if (position != 0) {
+            List<MediaWrapper> mediaList = mHistoryAdapter.getAll();
+            mediaList.remove(position);
+            mediaList.add(0, (MediaWrapper) item);
+            mHistoryAdapter.notifyItemMoved(position, 0);
+        }
         MediaUtils.openMedia(v.getContext(), (MediaWrapper) item);
     }
 
     @Override
     public boolean onLongClick(View v, int position, MediaLibraryItem item) {
-        if (mActionMode != null) return false;
+        if (mActionMode != null)
+            return false;
         item.toggleStateFlag(MediaLibraryItem.FLAG_SELECTED);
         mHistoryAdapter.notifyItemChanged(position, item);
         startActionMode();
@@ -245,6 +287,5 @@ public class HistoryFragment extends MediaBrowserFragment<HistoryProvider> imple
     @Override
     public void onUpdateFinished(RecyclerView.Adapter adapter) {
         invalidateActionMode();
-        UiTools.updateSortTitles(this);
     }
 }

@@ -23,20 +23,19 @@
 
 package org.videolan.vlc.gui.browser;
 
-import android.arch.lifecycle.ViewModelProviders;
 import android.databinding.DataBindingUtil;
+import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.design.widget.Snackbar;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v4.util.SimpleArrayMap;
+import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.View;
 import android.widget.CheckBox;
 
-import org.videolan.libvlc.util.AndroidUtil;
+import org.videolan.libvlc.Media;
 import org.videolan.medialibrary.interfaces.EntryPointsEventsCb;
 import org.videolan.medialibrary.media.MediaLibraryItem;
 import org.videolan.medialibrary.media.MediaWrapper;
@@ -45,16 +44,23 @@ import org.videolan.vlc.R;
 import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.databinding.BrowserItemBinding;
 import org.videolan.vlc.gui.helpers.ThreeStatesCheckbox;
+import org.videolan.vlc.util.AndroidDevices;
 import org.videolan.vlc.util.CustomDirectories;
-import org.videolan.vlc.viewmodels.browser.StorageProvider;
+
+import java.io.File;
+import java.util.ArrayList;
 
 public class StorageBrowserFragment extends FileBrowserFragment implements EntryPointsEventsCb {
 
     public static final String KEY_IN_MEDIALIB = "key_in_medialib";
 
     boolean mScannedDirectory = false;
-    private final SimpleArrayMap<String, CheckBox> mProcessingFolders = new SimpleArrayMap<>();
-    private Snackbar mSnack;
+    SimpleArrayMap<String, CheckBox> mProcessingFolders = new SimpleArrayMap<>();
+
+    public StorageBrowserFragment(){
+        mHandler = new BrowserFragmentHandler(this);
+        ROOT = AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY;
+    }
 
     public boolean isSortEnabled() {
         return false;
@@ -67,23 +73,15 @@ public class StorageBrowserFragment extends FileBrowserFragment implements Entry
 
     @Override
     public void onCreate(Bundle bundle) {
+        VLCApplication.clearData();
         super.onCreate(bundle);
         mAdapter = new StorageBrowserAdapter(this);
-        if (bundle == null) bundle = getArguments();
-        if (bundle != null) mScannedDirectory = bundle.getBoolean(KEY_IN_MEDIALIB);
-    }
-
-    @Override
-    public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
-        if (mRoot && VLCApplication.showTvUi()) {
-            mSnack = Snackbar.make(view, R.string.tv_settings_hint, Snackbar.LENGTH_INDEFINITE);
-            if (AndroidUtil.isLolliPopOrLater) mSnack.getView().setElevation(view.getResources().getDimensionPixelSize(R.dimen.audio_player_elevation));
+        mAdapter.setConfig(((VLCApplication)getActivity().getApplication()).getConfig());
+        if (bundle == null)
+            bundle = getArguments();
+        if (bundle != null){
+            mScannedDirectory = bundle.getBoolean(KEY_IN_MEDIALIB);
         }
-    }
-
-    protected void setupBrowser() {
-        mProvider = ViewModelProviders.of(this, new StorageProvider.Factory(mMrl, mShowHiddenFiles)).get(StorageProvider.class);
     }
 
     @Override
@@ -95,7 +93,6 @@ public class StorageBrowserFragment extends FileBrowserFragment implements Entry
             setFabPlayVisibility(true);
         }
         VLCApplication.getMLInstance().addEntryPointsEventsCb(this);
-        if (mSnack != null) mSnack.show();
     }
 
     @Override
@@ -106,7 +103,17 @@ public class StorageBrowserFragment extends FileBrowserFragment implements Entry
             mFabPlay.setOnClickListener(null);
         }
         VLCApplication.getMLInstance().removeEntryPointsEventsCb(this);
-        if (mSnack != null) mSnack.dismiss();
+    }
+
+    @Override
+    public void onViewCreated(View view, Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        if (VLCApplication.showTvUi()) {
+            if (mRoot && mFabPlay != null)
+                mFabPlay.requestFocus();
+            else
+                mRecyclerView.requestFocus();
+        }
     }
 
     @Override
@@ -115,17 +122,46 @@ public class StorageBrowserFragment extends FileBrowserFragment implements Entry
         outState.putBoolean(KEY_IN_MEDIALIB, mScannedDirectory);
     }
 
-//    @Override
-//    public void onMediaAdded(int index, Media media) {
-//        if (media.getType() != Media.Type.Directory)
-//            return;
-//        super.onMediaAdded(index, media);
-//    }
+    @Override
+    protected void browseRoot() {
+        String[] storages = AndroidDevices.getMediaDirectories();
+        String[] customDirectories = CustomDirectories.getCustomDirectories();
+        Storage storage;
+        ArrayList<MediaLibraryItem> storagesList = new ArrayList<>();
+        for (String mediaDirLocation : storages) {
+            if (TextUtils.isEmpty(mediaDirLocation))
+                continue;
+            storage = new Storage(Uri.fromFile(new File(mediaDirLocation)));
+            if (TextUtils.equals(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY, mediaDirLocation))
+                storage.setName(getString(R.string.internal_memory));
+            storagesList.add(storage);
+        }
+        customLoop:
+        for (String customDir : customDirectories) {
+            for (String mediaDirLocation : storages) {
+                if (TextUtils.isEmpty(mediaDirLocation))
+                    continue;
+                if (customDir.startsWith(mediaDirLocation))
+                    continue customLoop;
+            }
+            storage = new Storage(Uri.parse(customDir));
+            storagesList.add(storage);
+        }
+        mAdapter.update(storagesList);
+        mHandler.sendEmptyMessage(BrowserFragmentHandler.MSG_HIDE_LOADING);
+    }
+
+    @Override
+    public void onMediaAdded(int index, Media media) {
+        if (media.getType() != Media.Type.Directory)
+            return;
+        super.onMediaAdded(index, media);
+    }
 
     public void browse (MediaWrapper media, int position, boolean scanned){
-        final FragmentTransaction ft = getActivity().getSupportFragmentManager().beginTransaction();
-        final Fragment next = createFragment();
-        final Bundle args = new Bundle();
+        FragmentTransaction ft = getActivity().getSupportFragmentManager().beginTransaction();
+        Fragment next = createFragment();
+        Bundle args = new Bundle();
         args.putParcelable(KEY_MEDIA, media);
         args.putBoolean(KEY_IN_MEDIALIB, mScannedDirectory || scanned);
         next.setArguments(args);
@@ -179,16 +215,16 @@ public class StorageBrowserFragment extends FileBrowserFragment implements Entry
         if (entryPoint.endsWith("/"))
             entryPoint = entryPoint.substring(0, entryPoint.length()-1);
         if (mProcessingFolders.containsKey(entryPoint)) {
-            final CheckBox cb = mProcessingFolders.remove(entryPoint);
+            final String finalMrl = entryPoint;
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
-                    cb.setEnabled(true);
+                    mProcessingFolders.get(finalMrl).setEnabled(true);
                     if (success) {
                         ((StorageBrowserAdapter)mAdapter).updateMediaDirs();
                         mAdapter.notifyDataSetChanged();
                     } else
-                        cb.setChecked(true);
+                        mProcessingFolders.get(finalMrl).setChecked(false);
                 }
             });
         }

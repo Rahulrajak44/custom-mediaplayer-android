@@ -23,6 +23,7 @@ package org.videolan.vlc.gui.tv;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
@@ -37,7 +38,6 @@ import android.support.v17.leanback.widget.FullWidthDetailsOverviewRowPresenter;
 import android.support.v17.leanback.widget.ListRow;
 import android.support.v17.leanback.widget.ListRowPresenter;
 import android.support.v17.leanback.widget.OnActionClickedListener;
-import android.support.v4.content.ContextCompat;
 import android.text.TextUtils;
 import android.widget.Toast;
 
@@ -49,13 +49,14 @@ import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.gui.PlaybackServiceFragment;
 import org.videolan.vlc.gui.helpers.AudioUtil;
 import org.videolan.vlc.gui.tv.audioplayer.AudioPlayerActivity;
+import org.videolan.vlc.gui.tv.browser.SortedBrowserFragment;
 import org.videolan.vlc.gui.video.VideoPlayerActivity;
 import org.videolan.vlc.media.MediaDatabase;
 import org.videolan.vlc.media.MediaUtils;
+import org.videolan.vlc.util.AdLoader;
 import org.videolan.vlc.util.FileUtils;
-import org.videolan.vlc.util.WorkersKt;
 
-import java.util.List;
+import java.util.ArrayList;
 
 @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
 public class MediaItemDetailsFragment extends DetailsFragment implements PlaybackService.Client.Callback {
@@ -92,7 +93,7 @@ public class MediaItemDetailsFragment extends DetailsFragment implements Playbac
     }
 
     public void onPause() {
-        mBackgroundManager.release();
+        TvUtil.releaseBackgroundManager(mBackgroundManager);
         super.onPause();
         if (mService != null && mService.isPlaying())
             mService.stop();
@@ -121,16 +122,16 @@ public class MediaItemDetailsFragment extends DetailsFragment implements Playbac
         mMediaWrapper = media;
         setTitle(media.getTitle());
 
-        final List<MediaWrapper> mediaList = null;
+        final ArrayList<MediaWrapper> mediaList = (ArrayList<MediaWrapper>) VLCApplication.getData(SortedBrowserFragment.CURRENT_BROWSER_LIST);
         // Attach your media item details presenter to the row presenter:
         FullWidthDetailsOverviewRowPresenter rowPresenter = new FullWidthDetailsOverviewRowPresenter(new DetailsDescriptionPresenter());
 
-        final Activity activity = getActivity();
+        final Resources res = getActivity().getResources();
         final DetailsOverviewRow detailsOverview = new DetailsOverviewRow(mMedia);
         final Action actionAdd = new Action(ID_FAVORITE_ADD, getString(R.string.favorites_add));
         final Action actionDelete = new Action(ID_FAVORITE_DELETE, getString(R.string.favorites_remove));
 
-        rowPresenter.setBackgroundColor(ContextCompat.getColor(activity, R.color.orange500));
+        rowPresenter.setBackgroundColor(((VLCApplication)getActivity().getApplication()).getConfig().getColorAccent());
         rowPresenter.setOnActionClickedListener(new OnActionClickedListener() {
 
             @Override
@@ -140,7 +141,7 @@ public class MediaItemDetailsFragment extends DetailsFragment implements Playbac
                         PlaybackServiceFragment.registerPlaybackService(MediaItemDetailsFragment.this, MediaItemDetailsFragment.this);
                         break;
                     case ID_PLAY:
-                        TvUtil.INSTANCE.playMedia(getActivity(), media);
+                        TvUtil.playMedia(getActivity(), media);
                         getActivity().finish();
                         break;
                     case ID_FAVORITE_ADD:
@@ -158,7 +159,7 @@ public class MediaItemDetailsFragment extends DetailsFragment implements Playbac
                         Toast.makeText(VLCApplication.getAppContext(), R.string.favorite_removed, Toast.LENGTH_SHORT).show();
                         break;
                     case ID_BROWSE:
-                        TvUtil.INSTANCE.openMedia(getActivity(), media, null);
+                        TvUtil.openMedia(getActivity(), media, null);
                         break;
                     case ID_DL_SUBS:
                         MediaUtils.getSubs(getActivity(), media);
@@ -177,8 +178,14 @@ public class MediaItemDetailsFragment extends DetailsFragment implements Playbac
                         }
                         break;
                     case ID_PLAY_FROM_START:
-                        VideoPlayerActivity.start(getActivity(), media.getUri(), true);
-                        getActivity().finish();
+                        AdLoader.loadFullscreenBanner(getActivity(), new AdLoader.ContentPlayAllowedListener() {
+                            @Override
+                            public void onPlayAllowed() {
+                                VideoPlayerActivity.start(getActivity(), media.getUri(), true);
+                                getActivity().finish();
+                            }
+                        });
+
                         break;
                 }
             }
@@ -187,19 +194,17 @@ public class MediaItemDetailsFragment extends DetailsFragment implements Playbac
         selector.addClassPresenter(ListRow.class,
                 new ListRowPresenter());
         mRowsAdapter = new ArrayObjectAdapter(selector);
-        WorkersKt.runBackground(new Runnable() {
+        VLCApplication.runBackground(new Runnable() {
             @Override
             public void run() {
                 final Bitmap cover = media.getType() == MediaWrapper.TYPE_AUDIO || media.getType() == MediaWrapper.TYPE_VIDEO
                 ? AudioUtil.readCoverBitmap(mMedia.getArtworkUrl(), 512) : null;
-                WorkersKt.runOnMainThread(new Runnable() {
+                VLCApplication.runOnMainThread(new Runnable() {
                     @Override
                     public void run() {
-                        if (isDetached())
-                            return;
                         if (media.getType() == MediaWrapper.TYPE_DIR && FileUtils.canSave(media)) {
                             mDb = MediaDatabase.getInstance();
-                            detailsOverview.setImageDrawable(ContextCompat.getDrawable(activity, TextUtils.equals(media.getUri().getScheme(),"file")
+                            detailsOverview.setImageDrawable(getResources().getDrawable(TextUtils.equals(media.getUri().getScheme(),"file")
                                     ? R.drawable.ic_menu_folder_big
                                     : R.drawable.ic_menu_network_big));
                             detailsOverview.setImageScaleUpAllowed(true);
@@ -212,7 +217,7 @@ public class MediaItemDetailsFragment extends DetailsFragment implements Playbac
                         } else if (media.getType() == MediaWrapper.TYPE_AUDIO) {
                             // Add images and action buttons to the details view
                             if (cover == null)
-                                detailsOverview.setImageDrawable(ContextCompat.getDrawable(activity, R.drawable.ic_default_cone));
+                                detailsOverview.setImageDrawable(res.getDrawable(R.drawable.app_icon));
                             else
                                 detailsOverview.setImageBitmap(getActivity(), cover);
 
@@ -223,7 +228,7 @@ public class MediaItemDetailsFragment extends DetailsFragment implements Playbac
                         } else if (media.getType() == MediaWrapper.TYPE_VIDEO) {
                             // Add images and action buttons to the details view
                             if (cover == null)
-                                detailsOverview.setImageDrawable(ContextCompat.getDrawable(activity, R.drawable.ic_default_cone));
+                                detailsOverview.setImageDrawable(res.getDrawable(R.drawable.app_icon));
                             else
                                 detailsOverview.setImageBitmap(getActivity(), cover);
 

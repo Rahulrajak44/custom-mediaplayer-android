@@ -15,9 +15,6 @@
         <variable
             name="handler"
             type="org.videolan.vlc.gui.SearchActivity.ClickHandler" />
-        <variable
-            name="bgColor"
-            type="int" />
     </data>
 
     <RelativeLayout
@@ -25,8 +22,7 @@
         android:layout_height="wrap_content"
         android:layout_margin="10dp"
         android:clickable="true"
-        android:focusable="true"
-        android:background="@{bgColor}"
+        android:background="?attr/background_default"
         android:onClick="@{() -> handler.onItemClick(item)}">
 
         <ImageView

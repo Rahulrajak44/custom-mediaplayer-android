@@ -72,6 +72,7 @@ public class VLCExtensionItem implements Parcelable {
     public static final int TYPE_OTHER_FILE = 5;
 
     public String stringId;
+    public int intId;
 
     public String link;
     public String title;
@@ -85,9 +86,11 @@ public class VLCExtensionItem implements Parcelable {
      * You have to provide a String or int id for browsable elements (with type #TYPE_DIRECTORY)
      *
      * @param stringId The String to use as an ID, set to #null if you prefer to use the #intId
+     * @param intId The int to use as an ID, set to 0 if you prefer to use the #stringId
      */
-    public VLCExtensionItem(String stringId) {
+    public VLCExtensionItem(String stringId, int intId) {
         this.stringId = stringId;
+        this.intId = intId;
     }
 
     public VLCExtensionItem() {}
@@ -202,6 +205,7 @@ public class VLCExtensionItem implements Parcelable {
     @Override
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeString(stringId);
+        dest.writeInt(intId);
         dest.writeString(link);
         dest.writeString(title);
         dest.writeString(subTitle);
@@ -211,6 +215,7 @@ public class VLCExtensionItem implements Parcelable {
 
     public void readFromParcel(Parcel in) {
         stringId = in.readString();
+        intId = in.readInt();
         link = in.readString();
         title = in.readString();
         subTitle = in.readString();

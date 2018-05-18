@@ -10,18 +10,13 @@
     </style>
     <style name="Theme.VLC.Black.21" parent="Theme.VLC.Black.7">
         <item name="android:popupMenuStyle">@style/PopupMenuStyle</item>
-        <item name="android:navigationBarColor">?attr/background_actionbar</item>
     </style>
     <style name="Theme.VLC.Player.21" parent="Theme.VLC.Player.19">
         <item name="android:windowTranslucentStatus">false</item>">
         <item name="android:windowTranslucentNavigation">false</item>
         <item name="android:navigationBarColor">@color/transparent</item>
     </style>
-    <style name="Toolbar.VLC" parent="ThemeOverlay.AppCompat.Dark.ActionBar">
-        <item name="android:textCursorDrawable">@drawable/cursor_w</item>
-        <item name="elevation">0dp</item>
-        <item name="android:elevation">0dp</item>
-    </style>
+
     <style name="PopupMenuStyle.Light" parent="@style/Widget.AppCompat.Light.PopupMenu">
         <item name="android:overlapAnchor">true</item>
     </style>

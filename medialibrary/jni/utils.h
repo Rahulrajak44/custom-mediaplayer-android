@@ -24,6 +24,8 @@
 #include <medialibrary/Types.h>
 #include <medialibrary/IMediaLibrary.h>
 
+#define VLC_JNI_VERSION JNI_VERSION_1_2
+
 struct fields {
     jint SDK_INT;
     struct IllegalStateException {
@@ -35,6 +37,7 @@ struct fields {
     struct MediaLibrary {
         jclass clazz;
         jfieldID instanceID;
+        jmethodID getWeakReferenceID;
         jmethodID onMediaAddedId;
         jmethodID onMediaUpdatedId;
         jmethodID onMediaDeletedId;
@@ -56,8 +59,11 @@ struct fields {
         jmethodID onEntryPointBannedId;
         jmethodID onEntryPointUnbannedId;
         jmethodID onEntryPointRemovedId;
-        jmethodID onMediaThumbnailReadyId;
     } MediaLibrary;
+    struct WeakReference {
+        jclass clazz;
+        jmethodID getID;
+    } WeakReference;
     struct Album {
         jclass clazz;
         jmethodID initID;
@@ -100,6 +106,6 @@ jobject convertPlaylistObject(JNIEnv* env, fields *fields, medialibrary::Playlis
 jobject convertSearchAggregateObject(JNIEnv* env, fields *fields, medialibrary::SearchAggregate const& searchAggregatePtr);
 jobject convertMediaSearchAggregateObject(JNIEnv* env, fields *fields, medialibrary::MediaSearchAggregate const& searchAggregatePtr);
 jobject convertHistoryItemObject(JNIEnv* env, fields *fields, medialibrary::HistoryPtr const& historyPtr);
-jobjectArray filteredArray(JNIEnv* env, jobjectArray array, jclass clazz, int removalCount = -1);
+jobjectArray filteredArray(JNIEnv* env, fields *fields, jobjectArray array, int removalCount = -1);
 
 #endif //VLC_MEDIALIB_UTILS_H

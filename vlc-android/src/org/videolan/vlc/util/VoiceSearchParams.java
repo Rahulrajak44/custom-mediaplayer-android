@@ -26,7 +26,6 @@ import android.os.Bundle;
 import android.provider.MediaStore;
 import android.text.TextUtils;
 
-
 import org.videolan.libvlc.util.AndroidUtil;
 
 public class VoiceSearchParams {

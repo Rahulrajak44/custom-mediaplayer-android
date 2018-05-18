@@ -1,7 +1,6 @@
 #include "AndroidMediaLibrary.h"
 #define LOG_TAG "VLC/JNI/AndroidMediaLibrary"
 #include "log.h"
-#include "jniloader.h"
 
 #define FLAG_MEDIA_UPDATED_AUDIO       1 << 0
 #define FLAG_MEDIA_UPDATED_AUDIO_EMPTY 1 << 1
@@ -12,7 +11,6 @@
 
 static pthread_key_t jni_env_key;
 static JavaVM *myVm;
-static bool m_started = false;
 
 static void jni_detach_thread(void *data)
 {
@@ -33,8 +31,20 @@ AndroidMediaLibrary::AndroidMediaLibrary(JavaVM *vm, fields *ref_fields, jobject
     p_ml->setVerbosity(medialibrary::LogLevel::Info);
     pthread_once(&key_once, key_init);
     JNIEnv *env = getEnv();
-    if (env == NULL) return;
-    weak_thiz = env->NewWeakGlobalRef(thiz);
+    if (env == NULL)
+        return;
+    if (p_fields->MediaLibrary.getWeakReferenceID)
+    {
+        weak_thiz = nullptr;
+        jobject weak_compat = env->CallObjectMethod(thiz, p_fields->MediaLibrary.getWeakReferenceID);
+        if (weak_compat)
+            this->weak_compat = env->NewGlobalRef(weak_compat);
+        env->DeleteLocalRef(weak_compat);
+    } else
+    {
+        weak_thiz = p_fields->MediaLibrary.getWeakReferenceID ? nullptr : env->NewWeakGlobalRef(thiz);
+        weak_compat = nullptr;
+    }
 }
 
 AndroidMediaLibrary::~AndroidMediaLibrary()
@@ -44,7 +54,7 @@ AndroidMediaLibrary::~AndroidMediaLibrary()
     delete p_ml;
 }
 
-medialibrary::InitializeResult
+bool
 AndroidMediaLibrary::initML(const std::string& dbPath, const std::string& thumbsPath)
 {
     p_DeviceListerCb = p_ml->setDeviceLister(p_lister);
@@ -55,14 +65,14 @@ void
 AndroidMediaLibrary::start()
 {
     p_ml->start();
-    m_started = true;
 }
 
 bool
-AndroidMediaLibrary::addDevice(const std::string& uuid, const std::string& path, bool removable)
+AndroidMediaLibrary::addDevice(const std::string& uuid, const std::string& path, bool removable, bool notify)
 {
     p_lister->addDevice(uuid, path, removable);
-    return p_DeviceListerCb != nullptr && (m_started ? p_DeviceListerCb->onDevicePlugged(uuid, path) : !p_DeviceListerCb->isDeviceKnown(uuid));
+    return p_DeviceListerCb != nullptr && notify ? p_DeviceListerCb->onDevicePlugged(uuid, path)
+                                                 : !p_DeviceListerCb->isDeviceKnown(uuid);
 }
 
 std::vector<std::tuple<std::string, std::string, bool>>
@@ -84,12 +94,6 @@ void
 AndroidMediaLibrary::banFolder(const std::string& path)
 {
     p_ml->banFolder(path);
-}
-
-void
-AndroidMediaLibrary::unbanFolder(const std::string& path)
-{
-    p_ml->unbanFolder(path);
 }
 
 void
@@ -154,19 +158,10 @@ AndroidMediaLibrary::forceParserRetry()
     p_ml->forceParserRetry();
 }
 
-void
-AndroidMediaLibrary::forceRescan()
-{
-    p_ml->forceRescan();
-}
-
 bool
 AndroidMediaLibrary::increasePlayCount(int64_t mediaId)
 {
-    auto media = p_ml->media(mediaId);
-    if (media != nullptr)
-        return media->increasePlayCount();
-    return false;
+    return p_ml->media(mediaId)->increasePlayCount();
 }
 
 std::vector<medialibrary::MediaPtr>
@@ -269,9 +264,9 @@ AndroidMediaLibrary::audioFiles( medialibrary::SortingCriteria sort, bool desc )
 }
 
 std::vector<medialibrary::AlbumPtr>
-AndroidMediaLibrary::albums(medialibrary::SortingCriteria sort, bool desc)
+AndroidMediaLibrary::albums()
 {
-    return p_ml->albums(sort, desc);
+    return p_ml->albums();
 }
 
 medialibrary::AlbumPtr
@@ -281,9 +276,9 @@ AndroidMediaLibrary::album(int64_t albumId)
 }
 
 std::vector<medialibrary::ArtistPtr>
-AndroidMediaLibrary::artists(bool includeAll, medialibrary::SortingCriteria sort, bool desc)
+AndroidMediaLibrary::artists()
 {
-    return p_ml->artists(includeAll, sort, desc);
+    return p_ml->artists();
 }
 
 medialibrary::ArtistPtr
@@ -293,9 +288,9 @@ AndroidMediaLibrary::artist(int64_t artistId)
 }
 
 std::vector<medialibrary::GenrePtr>
-AndroidMediaLibrary::genres(medialibrary::SortingCriteria sort, bool desc)
+AndroidMediaLibrary::genres()
 {
-    return p_ml->genres(sort, desc);
+    return p_ml->genres();
 }
 
 medialibrary::GenrePtr
@@ -305,9 +300,9 @@ AndroidMediaLibrary::genre(int64_t genreId)
 }
 
 std::vector<medialibrary::PlaylistPtr>
-AndroidMediaLibrary::playlists(medialibrary::SortingCriteria sort, bool desc)
+AndroidMediaLibrary::playlists()
 {
-    return p_ml->playlists(sort, desc);
+    return p_ml->playlists();
 }
 
 medialibrary::PlaylistPtr
@@ -323,45 +318,45 @@ AndroidMediaLibrary::PlaylistCreate( const std::string &name )
 }
 
 std::vector<medialibrary::MediaPtr>
-AndroidMediaLibrary::tracksFromAlbum( int64_t albumId, medialibrary::SortingCriteria sort, bool desc )
+AndroidMediaLibrary::tracksFromAlbum( int64_t albumId )
 {
     auto album = p_ml->album(albumId);
-    return album == nullptr ? std::vector<medialibrary::MediaPtr>() : album->tracks(sort, desc);
+    return album == nullptr ? std::vector<medialibrary::MediaPtr>() : album->tracks();
 }
 
 std::vector<medialibrary::MediaPtr>
-AndroidMediaLibrary::mediaFromArtist( int64_t artistId, medialibrary::SortingCriteria sort, bool desc )
+AndroidMediaLibrary::mediaFromArtist( int64_t artistId )
 {
     auto artist = p_ml->artist(artistId);
-    return artist == nullptr ? std::vector<medialibrary::MediaPtr>() : artist->media(sort, desc);
+    return artist == nullptr ? std::vector<medialibrary::MediaPtr>() : artist->media();
 }
 
 std::vector<medialibrary::AlbumPtr>
-AndroidMediaLibrary::albumsFromArtist( int64_t artistId, medialibrary::SortingCriteria sort, bool desc )
+AndroidMediaLibrary::albumsFromArtist( int64_t artistId )
 {
     auto artist = p_ml->artist(artistId);
-    return artist == nullptr ? std::vector<medialibrary::AlbumPtr>() : artist->albums(sort, desc);
+    return artist == nullptr ? std::vector<medialibrary::AlbumPtr>() : artist->albums();
 }
 
 std::vector<medialibrary::MediaPtr>
-AndroidMediaLibrary::mediaFromGenre( int64_t genreId, medialibrary::SortingCriteria sort, bool desc )
+AndroidMediaLibrary::mediaFromGenre( int64_t genreId )
 {
     auto genre = p_ml->genre(genreId);
-    return genre == nullptr ? std::vector<medialibrary::MediaPtr>() : genre->tracks(sort, desc);
+    return genre == nullptr ? std::vector<medialibrary::MediaPtr>() : genre->tracks();
 }
 
 std::vector<medialibrary::AlbumPtr>
-AndroidMediaLibrary::albumsFromGenre( int64_t genreId, medialibrary::SortingCriteria sort, bool desc )
+AndroidMediaLibrary::albumsFromGenre( int64_t genreId )
 {
     auto genre = p_ml->genre(genreId);
-    return genre == nullptr ? std::vector<medialibrary::AlbumPtr>() : genre->albums(sort, desc);
+    return genre == nullptr ? std::vector<medialibrary::AlbumPtr>() : genre->albums();
 }
 
 std::vector<medialibrary::ArtistPtr>
-AndroidMediaLibrary::artistsFromGenre( int64_t genreId, medialibrary::SortingCriteria sort, bool desc )
+AndroidMediaLibrary::artistsFromGenre( int64_t genreId )
 {
     auto genre = p_ml->genre(genreId);
-    return genre == nullptr ? std::vector<medialibrary::ArtistPtr>() : genre->artists(sort, desc);
+    return genre == nullptr ? std::vector<medialibrary::ArtistPtr>() : genre->artists();
 }
 
 std::vector<medialibrary::MediaPtr>
@@ -402,13 +397,6 @@ AndroidMediaLibrary::PlaylistDelete( int64_t playlistId )
 }
 
 void
-AndroidMediaLibrary::requestThumbnail( int64_t media_id )
-{
-    medialibrary::MediaPtr media = p_ml->media(media_id);
-    if (media != nullptr) p_ml->requestThumbnail(media);
-}
-
-void
 AndroidMediaLibrary::onMediaAdded( std::vector<medialibrary::MediaPtr> mediaList )
 {
     if (m_mediaAddedType & FLAG_MEDIA_ADDED_AUDIO || m_mediaAddedType & FLAG_MEDIA_ADDED_VIDEO
@@ -442,10 +430,13 @@ AndroidMediaLibrary::onMediaAdded( std::vector<medialibrary::MediaPtr> mediaList
 
         if (index > -1)
         {
-            if (weak_thiz)
+            jobject thiz = getWeakReference(env);
+            if (thiz)
             {
-                results = filteredArray(env, mediaRefs, p_fields->MediaWrapper.clazz, -1);
-                env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onMediaAddedId, results);
+                results = filteredArray(env, p_fields, mediaRefs, -1);
+                env->CallVoidMethod(thiz, p_fields->MediaLibrary.onMediaAddedId, results);
+                if (weak_compat)
+                    env->DeleteLocalRef(thiz);
                 env->DeleteLocalRef(results);
             } else
                 env->DeleteLocalRef(mediaRefs);
@@ -485,10 +476,13 @@ void AndroidMediaLibrary::onMediaUpdated( std::vector<medialibrary::MediaPtr> me
         }
         if (index > -1)
         {
-            results = filteredArray(env, mediaRefs, p_fields->MediaWrapper.clazz, -1);
-            if (weak_thiz)
+            jobject thiz = getWeakReference(env);
+            results = filteredArray(env, p_fields, mediaRefs, -1);
+            if (thiz)
             {
-                env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onMediaUpdatedId, results);
+                env->CallVoidMethod(thiz, p_fields->MediaLibrary.onMediaUpdatedId, results);
+                if (weak_compat)
+                    env->DeleteLocalRef(thiz);
                 env->DeleteLocalRef(results);
             } else
                 env->DeleteLocalRef(mediaRefs);
@@ -503,23 +497,34 @@ void AndroidMediaLibrary::onMediaDeleted( std::vector<int64_t> ids )
 
 void AndroidMediaLibrary::onArtistsAdded( std::vector<medialibrary::ArtistPtr> artists )
 {
-    if (m_mediaAddedType & (FLAG_MEDIA_ADDED_AUDIO_EMPTY|FLAG_MEDIA_ADDED_AUDIO))
+    if (m_mediaAddedType & FLAG_MEDIA_ADDED_AUDIO)
     {
         JNIEnv *env = getEnv();
-        if (env == NULL) return;
-        if (weak_thiz) env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onArtistsAddedId);
+        if (env == NULL)
+            return;
+        jobject thiz = getWeakReference(env);
+        if (thiz)
+        {
+            env->CallVoidMethod(thiz, p_fields->MediaLibrary.onArtistsAddedId);
+            if (weak_compat)
+                env->DeleteLocalRef(thiz);
+        }
     }
 }
 
 void AndroidMediaLibrary::onArtistsModified( std::vector<medialibrary::ArtistPtr> artist )
 {
-    if (m_mediaUpdatedType & FLAG_MEDIA_UPDATED_AUDIO_EMPTY)
+    if (m_mediaUpdatedType & FLAG_MEDIA_UPDATED_AUDIO)
     {
         JNIEnv *env = getEnv();
-        if (env == NULL) return;
-        if (weak_thiz)
+        if (env == NULL)
+            return;
+        jobject thiz = getWeakReference(env);
+        if (thiz)
         {
-            env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onArtistsModifiedId);
+            env->CallVoidMethod(thiz, p_fields->MediaLibrary.onArtistsModifiedId);
+            if (weak_compat)
+                env->DeleteLocalRef(thiz);
         }
     }
 }
@@ -534,10 +539,14 @@ void AndroidMediaLibrary::onAlbumsAdded( std::vector<medialibrary::AlbumPtr> alb
     if (m_mediaAddedType & FLAG_MEDIA_ADDED_AUDIO)
     {
         JNIEnv *env = getEnv();
-        if (env == NULL) return;
-        if (weak_thiz)
+        if (env == NULL)
+            return;
+        jobject thiz = getWeakReference(env);
+        if (thiz)
         {
-            env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onAlbumsAddedId);
+            env->CallVoidMethod(thiz, p_fields->MediaLibrary.onAlbumsAddedId);
+            if (weak_compat)
+                env->DeleteLocalRef(thiz);
         }
     }
 }
@@ -547,10 +556,14 @@ void AndroidMediaLibrary::onAlbumsModified( std::vector<medialibrary::AlbumPtr> 
     if (m_mediaUpdatedType & FLAG_MEDIA_UPDATED_AUDIO)
     {
         JNIEnv *env = getEnv();
-        if (env == NULL) return;
-        if (weak_thiz)
+        if (env == NULL)
+            return;
+        jobject thiz = getWeakReference(env);
+        if (thiz)
         {
-            env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onAlbumsModifiedId);
+            env->CallVoidMethod(thiz, p_fields->MediaLibrary.onAlbumsModifiedId);
+            if (weak_compat)
+                env->DeleteLocalRef(thiz);
         }
     }
 }
@@ -588,11 +601,19 @@ void AndroidMediaLibrary::onDiscoveryStarted( const std::string& entryPoint )
 {
     ++m_nbDiscovery;
     JNIEnv *env = getEnv();
-    if (env == NULL) return;
+    if (env == NULL)
+        return;
+    if (mainStorage.empty()) {
+        discoveryEnded = false;
+        mainStorage = entryPoint;
+    }
     jstring ep = env->NewStringUTF(entryPoint.c_str());
-    if (weak_thiz)
+    jobject thiz = getWeakReference(env);
+    if (thiz != NULL)
     {
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onDiscoveryStartedId, ep);
+        env->CallVoidMethod(thiz, p_fields->MediaLibrary.onDiscoveryStartedId, ep);
+        if (weak_compat)
+            env->DeleteLocalRef(thiz);
     }
     env->DeleteLocalRef(ep);
 }
@@ -600,11 +621,15 @@ void AndroidMediaLibrary::onDiscoveryStarted( const std::string& entryPoint )
 void AndroidMediaLibrary::onDiscoveryProgress( const std::string& entryPoint )
 {
     JNIEnv *env = getEnv();
-    if (env == NULL) return;
+    if (env == NULL)
+        return;
     jstring ep = env->NewStringUTF(entryPoint.c_str());
-    if (weak_thiz)
+    jobject thiz = getWeakReference(env);
+    if (thiz)
     {
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onDiscoveryProgressId, ep);
+        env->CallVoidMethod(thiz, p_fields->MediaLibrary.onDiscoveryProgressId, ep);
+        if (weak_compat)
+            env->DeleteLocalRef(thiz);
     }
     env->DeleteLocalRef(ep);
 
@@ -616,12 +641,18 @@ void AndroidMediaLibrary::onDiscoveryCompleted( const std::string& entryPoint )
     JNIEnv *env = getEnv();
     if (env == NULL)
         return;
+    if (!entryPoint.compare(mainStorage)) {
+        discoveryEnded = true;
+        mainStorage.clear();
+    }
     jstring ep = env->NewStringUTF(entryPoint.c_str());
-    if (weak_thiz)
-    {
+    jobject thiz = getWeakReference(env);
+    if (thiz) {
         if (m_progress)
-            env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onParsingStatsUpdatedId, m_progress);
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onDiscoveryCompletedId, ep);
+            env->CallVoidMethod(thiz, p_fields->MediaLibrary.onParsingStatsUpdatedId, m_progress);
+        env->CallVoidMethod(thiz, p_fields->MediaLibrary.onDiscoveryCompletedId, ep);
+        if (weak_compat)
+            env->DeleteLocalRef(thiz);
     }
     env->DeleteLocalRef(ep);
 }
@@ -629,11 +660,14 @@ void AndroidMediaLibrary::onDiscoveryCompleted( const std::string& entryPoint )
 void AndroidMediaLibrary::onReloadStarted( const std::string& entryPoint )
 {
     JNIEnv *env = getEnv();
-    if (env == NULL) return;
+    if (env == NULL)
+        return;
     jstring ep = env->NewStringUTF(entryPoint.c_str());
-    if (weak_thiz)
-    {
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onReloadStartedId, ep);
+    jobject thiz = getWeakReference(env);
+    if (thiz) {
+        env->CallVoidMethod(thiz, p_fields->MediaLibrary.onReloadStartedId, ep);
+        if (weak_compat)
+            env->DeleteLocalRef(thiz);
     }
     env->DeleteLocalRef(ep);
 }
@@ -641,13 +675,17 @@ void AndroidMediaLibrary::onReloadStarted( const std::string& entryPoint )
 void AndroidMediaLibrary::onReloadCompleted( const std::string& entryPoint )
 {
     JNIEnv *env = getEnv();
-    if (env == NULL) return;
+    if (env == NULL)
+        return;
+    discoveryEnded = true;
     jstring ep = env->NewStringUTF(entryPoint.c_str());
-    if (weak_thiz)
-    {
+    jobject thiz = getWeakReference(env);
+    if (thiz) {
         if (m_progress)
-            env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onParsingStatsUpdatedId, m_progress);
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onReloadCompletedId, ep);
+            env->CallVoidMethod(thiz, p_fields->MediaLibrary.onParsingStatsUpdatedId, m_progress);
+        env->CallVoidMethod(thiz, p_fields->MediaLibrary.onReloadCompletedId, ep);
+        if (weak_compat)
+            env->DeleteLocalRef(thiz);
     }
     env->DeleteLocalRef(ep);
 }
@@ -655,11 +693,14 @@ void AndroidMediaLibrary::onReloadCompleted( const std::string& entryPoint )
 void AndroidMediaLibrary::onEntryPointBanned( const std::string& entryPoint, bool success )
 {
     JNIEnv *env = getEnv();
-    if (env == NULL) return;
+    if (env == NULL)
+        return;
     jstring ep = env->NewStringUTF(entryPoint.c_str());
-    if (weak_thiz)
-    {
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onEntryPointBannedId, ep, success);
+    jobject thiz = getWeakReference(env);
+    if (thiz) {
+        env->CallVoidMethod(thiz, p_fields->MediaLibrary.onEntryPointBannedId, ep, success);
+        if (weak_compat)
+            env->DeleteLocalRef(thiz);
     }
     env->DeleteLocalRef(ep);
 }
@@ -670,9 +711,11 @@ void AndroidMediaLibrary::onEntryPointUnbanned( const std::string& entryPoint, b
     if (env == NULL)
         return;
     jstring ep = env->NewStringUTF(entryPoint.c_str());
-    if (weak_thiz)
-    {
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onEntryPointUnbannedId, ep, success);
+    jobject thiz = getWeakReference(env);
+    if (thiz) {
+        env->CallVoidMethod(thiz, p_fields->MediaLibrary.onEntryPointUnbannedId, ep, success);
+        if (weak_compat)
+            env->DeleteLocalRef(thiz);
     }
     env->DeleteLocalRef(ep);
 }
@@ -680,11 +723,14 @@ void AndroidMediaLibrary::onEntryPointUnbanned( const std::string& entryPoint, b
 void AndroidMediaLibrary::onEntryPointRemoved( const std::string& entryPoint, bool success )
 {
     JNIEnv *env = getEnv();
-    if (env == NULL) return;
+    if (env == NULL)
+        return;
     jstring ep = env->NewStringUTF(entryPoint.c_str());
-    if (weak_thiz)
-    {
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onEntryPointRemovedId, ep, success);
+    jobject thiz = getWeakReference(env);
+    if (thiz) {
+        env->CallVoidMethod(thiz, p_fields->MediaLibrary.onEntryPointRemovedId, ep, success);
+        if (weak_compat)
+            env->DeleteLocalRef(thiz);
     }
     env->DeleteLocalRef(ep);
 }
@@ -692,12 +738,18 @@ void AndroidMediaLibrary::onEntryPointRemoved( const std::string& entryPoint, bo
 void AndroidMediaLibrary::onParsingStatsUpdated( uint32_t percent)
 {
     m_progress = percent;
+    if (!discoveryEnded)
+        return;
     JNIEnv *env = getEnv();
-    if (env == NULL) return;
+    if (env == NULL)
+        return;
     jint progress = percent;
-    if (weak_thiz)
+    jobject thiz = getWeakReference(env);
+    if (thiz != NULL)
     {
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onParsingStatsUpdatedId, progress);
+        env->CallVoidMethod(thiz, p_fields->MediaLibrary.onParsingStatsUpdatedId, progress);
+        if (weak_compat)
+            env->DeleteLocalRef(thiz);
     }
 }
 
@@ -705,21 +757,21 @@ void AndroidMediaLibrary::onParsingStatsUpdated( uint32_t percent)
 void AndroidMediaLibrary::onBackgroundTasksIdleChanged( bool isIdle )
 {
     JNIEnv *env = getEnv();
-    if (env == NULL) return;
-    if (weak_thiz)
+    if (env == NULL)
+        return;
+    jobject thiz = getWeakReference(env);
+    if (thiz != NULL)
     {
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onBackgroundTasksIdleChangedId, isIdle);
+        env->CallVoidMethod(thiz, p_fields->MediaLibrary.onBackgroundTasksIdleChangedId, isIdle);
+        if (weak_compat)
+            env->DeleteLocalRef(thiz);
     }
 }
 
-void AndroidMediaLibrary::onMediaThumbnailReady( medialibrary::MediaPtr media, bool success )
+jobject
+AndroidMediaLibrary::getWeakReference(JNIEnv *env)
 {
-    JNIEnv *env = getEnv();
-    if (env != NULL && weak_thiz)
-    {
-        auto item = mediaToMediaWrapper(env, p_fields, media);
-        env->CallVoidMethod(weak_thiz, p_fields->MediaLibrary.onMediaThumbnailReadyId, item, success);
-    }
+    return weak_thiz != nullptr ? weak_thiz : env->CallObjectMethod(weak_compat, p_fields->WeakReference.getID);
 }
 
 JNIEnv *

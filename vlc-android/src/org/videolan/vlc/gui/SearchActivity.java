@@ -5,22 +5,24 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.Resources;
 import android.databinding.DataBindingUtil;
+import android.graphics.PorterDuff;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.annotation.Nullable;
 import android.support.v4.content.LocalBroadcastManager;
-import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.KeyEvent;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
+import android.widget.EditText;
 import android.widget.TextView;
 
 import org.videolan.medialibrary.Medialibrary;
@@ -32,9 +34,10 @@ import org.videolan.vlc.databinding.SearchActivityBinding;
 import org.videolan.vlc.gui.helpers.UiTools;
 import org.videolan.vlc.gui.view.ContextMenuRecyclerView;
 import org.videolan.vlc.media.MediaUtils;
-import org.videolan.vlc.util.WorkersKt;
 
-public class SearchActivity extends AppCompatActivity implements TextWatcher, TextView.OnEditorActionListener {
+import java.lang.reflect.Field;
+
+public class SearchActivity extends BaseActivity implements TextWatcher, TextView.OnEditorActionListener {
 
     public final static String TAG = "VLC/SearchActivity";
 
@@ -47,12 +50,15 @@ public class SearchActivity extends AppCompatActivity implements TextWatcher, Te
         super.onCreate(savedInstanceState);
         if (PreferenceManager.getDefaultSharedPreferences(this).getBoolean("enable_black_theme", false))
             setTheme(R.style.Theme_VLC_Black);
-        final Intent intent = getIntent();
-        mBinding = DataBindingUtil.setContentView(this, R.layout.search_activity);
-        mBinding.setHandler(mClickHandler);
-        mMedialibrary = VLCApplication.getMLInstance();
+        Intent intent = getIntent();
         if (Intent.ACTION_SEARCH.equals(intent.getAction()) || "com.google.android.gms.actions.SEARCH_ACTION".equals(intent.getAction())) {
-            final String query = intent.getStringExtra(SearchManager.QUERY);
+            mBinding = DataBindingUtil.setContentView(this, R.layout.search_activity);
+            mBinding.searchEditText.setHintTextColor(config.getColorAccent());
+
+            setCursorDrawableColor(mBinding.searchEditText, config.getColorAccent());
+            mBinding.setHandler(mClickHandler);
+            mMedialibrary = VLCApplication.getMLInstance();
+            String query = intent.getStringExtra(SearchManager.QUERY);
             initializeLists();
             if (!TextUtils.isEmpty(query)) {
                 getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN);
@@ -68,14 +74,39 @@ public class SearchActivity extends AppCompatActivity implements TextWatcher, Te
         mBinding.searchEditText.setOnEditorActionListener(this);
     }
 
+    public static void setCursorDrawableColor(EditText editText, int color) {
+        try {
+            Field fCursorDrawableRes =
+                    TextView.class.getDeclaredField("mCursorDrawableRes");
+            fCursorDrawableRes.setAccessible(true);
+            int mCursorDrawableRes = fCursorDrawableRes.getInt(editText);
+            Field fEditor = TextView.class.getDeclaredField("mEditor");
+            fEditor.setAccessible(true);
+            Object editor = fEditor.get(editText);
+            Class<?> clazz = editor.getClass();
+            Field fCursorDrawable = clazz.getDeclaredField("mCursorDrawable");
+            fCursorDrawable.setAccessible(true);
+
+            Drawable[] drawables = new Drawable[2];
+            Resources res = editText.getContext().getResources();
+            drawables[0] = res.getDrawable(mCursorDrawableRes);
+            drawables[1] = res.getDrawable(mCursorDrawableRes);
+            drawables[0].setColorFilter(color, PorterDuff.Mode.SRC_IN);
+            drawables[1].setColorFilter(color, PorterDuff.Mode.SRC_IN);
+            fCursorDrawable.set(editor, drawables);
+        } catch (final Throwable ignored) {
+        }
+    }
+
+
     private void performSearh(final String query) {
-        WorkersKt.runBackground(new Runnable() {
+        VLCApplication.runBackground(new Runnable() {
             @Override
             public void run() {
                 final SearchAggregate searchAggregate = mMedialibrary.search(query);
                 mBinding.setSearchAggregate(searchAggregate);
                 if (searchAggregate != null) {
-                    WorkersKt.runOnMainThread(new Runnable() {
+                    VLCApplication.runOnMainThread(new Runnable() {
                         @Override
                         public void run() {
                             ((SearchResultAdapter)mBinding.albumsResults.getAdapter()).add(searchAggregate.getAlbums());
@@ -95,15 +126,19 @@ public class SearchActivity extends AppCompatActivity implements TextWatcher, Te
 
     private void initializeLists() {
         int count = mBinding.resultsContainer.getChildCount();
-        final LayoutInflater inflater = (LayoutInflater) getSystemService(Context.LAYOUT_INFLATER_SERVICE);
         for (int i = 0; i < count; ++i) {
             View v = mBinding.resultsContainer.getChildAt(i);
             if (v instanceof ContextMenuRecyclerView) {
-                ((RecyclerView)v).setAdapter(new SearchResultAdapter(inflater));
+                ((RecyclerView)v).setAdapter(new SearchResultAdapter());
                 ((RecyclerView)v).setLayoutManager(new LinearLayoutManager(this));
                 ((SearchResultAdapter)((RecyclerView)v).getAdapter()).setClickHandler(mClickHandler);
             }
+            if(v instanceof TextView){
+                ((TextView) v).setTextColor(((VLCApplication)getApplication()).getConfig().getColorAccent());
+            }
         }
+   /*     TextView noMedia = mBinding.resultsContainer.findViewById(R.id.no_media);
+        noMedia.setTextColor(config.getColorAccent());*/
     }
 
     @Override

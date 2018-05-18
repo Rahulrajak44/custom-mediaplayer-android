@@ -22,7 +22,6 @@
 package org.videolan.vlc.gui.dialogs;
 
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.support.v4.app.DialogFragment;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -33,9 +32,12 @@ import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
+import org.videolan.medialibrary.media.MediaWrapper;
 import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
-import org.videolan.vlc.gui.PlaybackServiceActivity;
+import org.videolan.vlc.VLCApplication;
+import org.videolan.vlc.config.Config;
+import org.videolan.vlc.gui.PlaybackServiceFragment;
 import org.videolan.vlc.gui.helpers.OnRepeatListener;
 import org.videolan.vlc.gui.helpers.UiTools;
 import org.videolan.vlc.util.Strings;
@@ -50,29 +52,45 @@ public class PlaybackSpeedDialog extends DialogFragment implements PlaybackServi
     private ImageView mPlaybackSpeedPlus;
     private ImageView mPlaybackSpeedMinus;
 
-    private PlaybackServiceActivity.Helper mHelper;
     protected PlaybackService mService;
     protected int mTextColor;
 
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mHelper = new PlaybackServiceActivity.Helper(getActivity(), this);
+    public PlaybackSpeedDialog() {
     }
 
-    public static PlaybackSpeedDialog newInstance() {
-        return new PlaybackSpeedDialog();
+    public static PlaybackSpeedDialog newInstance(int theme) {
+        PlaybackSpeedDialog myFragment = new PlaybackSpeedDialog();
+
+        Bundle args = new Bundle();
+        args.putInt("theme", theme);
+        myFragment.setArguments(args);
+
+        return myFragment;
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setStyle(DialogFragment.STYLE_NO_FRAME, getArguments().getInt("theme"));
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.dialog_playback_speed, container);
-        mSpeedValue = view.findViewById(R.id.playback_speed_value);
-        mSeekSpeed = view.findViewById(R.id.playback_speed_seek);
-        mPlaybackSpeedIcon = view.findViewById(R.id.playback_speed_icon);
-        mPlaybackSpeedPlus = view.findViewById(R.id.playback_speed_plus);
-        mPlaybackSpeedMinus = view.findViewById(R.id.playback_speed_minus);
+        mSpeedValue = (TextView) view.findViewById(R.id.playback_speed_value);
+        mSeekSpeed = (SeekBar) view.findViewById(R.id.playback_speed_seek);
+        Config config = ((VLCApplication)getActivity().getApplication()).getConfig();
+        mSeekSpeed.getProgressDrawable().setColorFilter(
+                config.getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+        mSeekSpeed.getThumb().setColorFilter(
+                config.getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+        mPlaybackSpeedIcon = (ImageView) view.findViewById(R.id.playback_speed_icon);
+        mPlaybackSpeedPlus = (ImageView) view.findViewById(R.id.playback_speed_plus);
+        mPlaybackSpeedPlus.setColorFilter(config.getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+
+        mPlaybackSpeedMinus = (ImageView) view.findViewById(R.id.playback_speed_minus);
+        mPlaybackSpeedMinus.setColorFilter(config.getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
 
         mSeekSpeed.setOnSeekBarChangeListener(mSeekBarListener);
         mPlaybackSpeedIcon.setOnClickListener(mResetListener);
@@ -104,11 +122,11 @@ public class PlaybackSpeedDialog extends DialogFragment implements PlaybackServi
     private SeekBar.OnSeekBarChangeListener mSeekBarListener = new SeekBar.OnSeekBarChangeListener() {
         @Override
         public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-            if (mService == null || mService.getCurrentMediaWrapper() == null)
+            if (mService == null)
                 return;
             if (fromUser) {
                 float rate = (float) Math.pow(4, ((double) progress / (double) 100) - 1);
-                mService.setRate(rate, true);
+                mService.setRate(rate, mService.getCurrentMediaWrapper().getType() == MediaWrapper.TYPE_AUDIO);
                 updateInterface();
             }
         }
@@ -126,7 +144,7 @@ public class PlaybackSpeedDialog extends DialogFragment implements PlaybackServi
             if (mService == null || mService.getRate() == 1.0d || mService.getCurrentMediaWrapper() == null)
                 return;
 
-            mService.setRate(1F, true);
+            mService.setRate(1F, mService.getCurrentMediaWrapper().getType() == MediaWrapper.TYPE_AUDIO);
             setRateProgress();
         }
     };
@@ -160,7 +178,7 @@ public class PlaybackSpeedDialog extends DialogFragment implements PlaybackServi
         float rate = Math.round((initialRate + delta) * 100f) / 100f;
         if (rate < 0.25f || rate > 4f || mService.getCurrentMediaWrapper() == null)
             return;
-        mService.setRate(rate, true);
+        mService.setRate(rate, mService.getCurrentMediaWrapper().getType() == MediaWrapper.TYPE_AUDIO);
     }
 
     private void updateInterface() {
@@ -168,7 +186,8 @@ public class PlaybackSpeedDialog extends DialogFragment implements PlaybackServi
         mSpeedValue.setText(Strings.formatRateString(rate));
         if (rate != 1.0f) {
             mPlaybackSpeedIcon.setImageResource(R.drawable.ic_speed_reset);
-            mSpeedValue.setTextColor(getResources().getColor(R.color.orange500));
+            mPlaybackSpeedIcon.setColorFilter(((VLCApplication)getActivity().getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+            mSpeedValue.setTextColor(((VLCApplication)getActivity().getApplication()).getConfig().getColorAccent());
         } else {
             mPlaybackSpeedIcon.setImageResource(UiTools.getResourceFromAttribute(getActivity(), R.attr.ic_speed_normal_style));
             mSpeedValue.setTextColor(mTextColor);
@@ -179,13 +198,13 @@ public class PlaybackSpeedDialog extends DialogFragment implements PlaybackServi
     @Override
     public void onStart() {
         super.onStart();
-        mHelper.onStart();
+        PlaybackServiceFragment.registerPlaybackService(this, this);
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        mHelper.onStop();
+        PlaybackServiceFragment.unregisterPlaybackService(this, this);
     }
 
     @Override

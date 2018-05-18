@@ -23,25 +23,19 @@
 
 package org.videolan.vlc.util;
 
-import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.content.ContentResolver;
-import android.content.Context;
 import android.content.res.AssetManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
-import android.os.storage.StorageManager;
-import android.preference.PreferenceManager;
 import android.provider.MediaStore;
-import android.support.v4.provider.DocumentFile;
 import android.text.TextUtils;
 import android.util.Log;
 
 import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.medialibrary.media.MediaWrapper;
-import org.videolan.vlc.BuildConfig;
 import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.media.MediaUtils;
 
@@ -54,12 +48,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.LongBuffer;
 import java.nio.channels.FileChannel;
-import java.util.List;
 
 public class FileUtils {
 
@@ -108,30 +100,33 @@ public class FileUtils {
     public static Uri convertLocalUri(Uri uri) {
         if (!TextUtils.equals(uri.getScheme(), "file") || !uri.getPath().startsWith("/sdcard"))
             return uri;
-        return Uri.parse(uri.toString().replace("/sdcard", AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY));
+        String path = uri.toString();
+        return Uri.parse(path.replace("/sdcard", AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY));
     }
 
     public static String getPathFromURI(Uri contentUri) {
         Cursor cursor = null;
         try {
-            final String[] proj = {MediaStore.Images.Media.DATA};
+            String[] proj = {MediaStore.Images.Media.DATA};
             cursor = VLCApplication.getAppContext().getContentResolver().query(contentUri, proj, null, null, null);
-            if (cursor == null || cursor.getCount() == 0)
+            if (cursor == null)
                 return "";
-            final int column_index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+            int column_index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
             cursor.moveToFirst();
             return cursor.getString(column_index);
-        } catch (IllegalArgumentException|SecurityException e) {
+        } catch (IllegalArgumentException e) {
                 return "";
         } finally {
-            if (cursor != null && !cursor.isClosed()) cursor.close();
+            if (cursor != null && !cursor.isClosed())
+                cursor.close();
         }
     }
 
-    static boolean copyAssetFolder(AssetManager assetManager, String fromAssetPath, String toPath) {
+    public static boolean copyAssetFolder(AssetManager assetManager, String fromAssetPath, String toPath) {
         try {
-            final String[] files = assetManager.list(fromAssetPath);
-            if (files.length == 0) return false;
+            String[] files = assetManager.list(fromAssetPath);
+            if (files.length == 0)
+                return false;
             new File(toPath).mkdirs();
             boolean res = true;
             for (String file : files)
@@ -152,13 +147,11 @@ public class FileUtils {
 
     private static boolean copyAsset(AssetManager assetManager,
                                      String fromAssetPath, String toPath) {
-        final File destFile = new File(toPath);
-        if (destFile.exists()) return true;
         InputStream in = null;
         OutputStream out = null;
         try {
             in = assetManager.open(fromAssetPath);
-            destFile.createNewFile();
+            new File(toPath).createNewFile();
             out = new FileOutputStream(toPath);
             copyFile(in, out);
             out.flush();
@@ -172,7 +165,7 @@ public class FileUtils {
         }
     }
 
-    private static void copyFile(InputStream in, OutputStream out) throws IOException {
+    public static void copyFile(InputStream in, OutputStream out) throws IOException {
         byte[] buffer = new byte[1024];
         int read;
         while((read = in.read(buffer)) != -1){
@@ -201,7 +194,8 @@ public class FileUtils {
                     out.write(buf, 0, len);
                 }
                 return true;
-            } catch (IOException ignored) {
+            } catch (FileNotFoundException e) {
+            } catch (IOException e) {
             } finally {
                 Util.close(in);
                 Util.close(out);
@@ -210,31 +204,26 @@ public class FileUtils {
         }
         return ret;
     }
-    public static boolean deleteFile (Uri uri) {
-        if (!AndroidUtil.isLolliPopOrLater || uri.getPath().startsWith(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY)) return deleteFile(uri.getPath());
-        final DocumentFile docFile = FileUtils.findFile(uri);
-        if (docFile != null) try {
-            return docFile.delete();
-        } catch (Exception ignored) {}
-        return false;
-    }
 
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     public static boolean deleteFile (String path){
         boolean deleted = false;
         path = Uri.decode(Strings.removeFileProtocole(path));
         //Delete from Android Medialib, for consistency with device MTP storing and other apps listing content:// media
-        final ContentResolver cr = VLCApplication.getAppContext().getContentResolver();
-        try {
-            deleted = cr.delete(MediaStore.Files.getContentUri("external"),
-                    MediaStore.Files.FileColumns.DATA + "=?", new String[]{path}) > 0;
-        } catch (IllegalArgumentException|SecurityException ignored) {} // Can happen on some devices...
-        final File file = new File(path);
-        if (file.exists()) deleted |= file.delete();
+        if (AndroidUtil.isHoneycombOrLater){
+            ContentResolver cr = VLCApplication.getAppContext().getContentResolver();
+            try {
+                deleted = cr.delete(MediaStore.Files.getContentUri("external"),
+                        MediaStore.Files.FileColumns.DATA + "=?", new String[]{path}) > 0;
+            } catch (IllegalArgumentException ignored) {} // Can happen on some devices...
+        }
+        File file = new File(path);
+        if (file.exists())
+            deleted |= file.delete();
         return deleted;
     }
 
-    private static void asyncRecursiveDelete(String path, Callback callback) {
+    public static void asyncRecursiveDelete(String path, Callback callback) {
         asyncRecursiveDelete(new File(path), callback);
     }
 
@@ -243,7 +232,7 @@ public class FileUtils {
     }
 
     private static void asyncRecursiveDelete(final File fileOrDirectory, final Callback callback) {
-        WorkersKt.runBackground(new Runnable() {
+        VLCApplication.runBackground(new Runnable() {
             public void run() {
                 if (!fileOrDirectory.exists() || !fileOrDirectory.canWrite())
                     return;
@@ -261,58 +250,50 @@ public class FileUtils {
         });
     }
 
-    public static boolean canSave(MediaWrapper mw) {
+    public static boolean canSave(MediaWrapper mw){
         if (mw == null || mw.getUri() == null)
             return false;
-        final String scheme = mw.getUri().getScheme();
-        return !TextUtils.equals(scheme, "file") &&
-                (TextUtils.equals(scheme, "smb")
-                        || TextUtils.equals(scheme, "nfs") || TextUtils.equals(scheme, "ftp")
-                        || TextUtils.equals(scheme, "ftps") || TextUtils.equals(scheme, "sftp"));
+        String scheme = mw.getUri().getScheme();
+        if (TextUtils.equals(scheme, "file"))
+            return false;
+        return TextUtils.equals(scheme, "smb")   ||
+                TextUtils.equals(scheme, "nfs")  ||
+                TextUtils.equals(scheme, "ftp")  ||
+                TextUtils.equals(scheme, "ftps") ||
+                TextUtils.equals(scheme, "sftp");
     }
 
-    public static boolean canWrite(Uri uri) {
-        if (uri == null) return false;
+    public static boolean canWrite(Uri uri){
+        if (uri == null)
+            return false;
         if (TextUtils.equals("file", uri.getScheme()))
-            return canWrite(uri.getPath());
-        return TextUtils.equals("content", uri.getScheme()) && canWrite(getPathFromURI(uri));
+            return canWrite(uri.toString());
+        if (TextUtils.equals("content", uri.getScheme()))
+            return canWrite(getPathFromURI(uri));
+        return false;
+
     }
 
     public static boolean canWrite(String path){
-        if (TextUtils.isEmpty(path)) return false;
-        if (path.startsWith("file://")) path = path.substring(7);
-        return path.startsWith("/");
+        if (TextUtils.isEmpty(path))
+            return false;
+        if (path.startsWith("file://"))
+            path = path.substring(7);
+        if (!path.startsWith("/"))
+            return false;
+        if (path.startsWith(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY))
+            return true;
+        if (AndroidUtil.isKitKatOrLater)
+            return false;
+        File file = new File(path);
+        return (file.exists() && file.canWrite());
     }
 
-    public static String getMediaStorage(Uri uri) {
-        if (uri == null || !"file".equals(uri.getScheme())) return null;
-        final String path = uri.getPath();
-        if (TextUtils.isEmpty(path)) return null;
-        final List<String> storages = AndroidDevices.getExternalStorageDirectories();
-        for (String storage : storages) if (path.startsWith(storage)) return storage;
-        return null;
-    }
-
-    public static DocumentFile findFile(Uri uri) {
-        final String storage = getMediaStorage(uri);
-        final String treePref = PreferenceManager.getDefaultSharedPreferences(VLCApplication.getAppContext()).getString("tree_uri_"+ storage, null);
-        if (treePref == null) return null;
-        final Uri treeUri = Uri.parse(treePref);
-        DocumentFile documentFile = DocumentFile.fromTreeUri(VLCApplication.getAppContext(), treeUri);
-        String[] parts = (uri.getPath()).split("/");
-        for (int i = 3; i < parts.length; i++) {
-            if (documentFile != null) documentFile = documentFile.findFile(parts[i]);
-            else return null;
-        }
-        if (documentFile != null) Log.d(TAG, "findFile: write "+documentFile.canWrite());
-        return documentFile;
-
-    }
-
-    static String computeHash(File file) {
+    public static String computeHash(File file) {
         long size = file.length();
         long chunkSizeForFile = Math.min(HASH_CHUNK_SIZE, size);
-        long head, tail;
+        long head = 0;
+        long tail = 0;
         FileInputStream fis = null;
         FileChannel fileChannel = null;
         try {
@@ -321,60 +302,70 @@ public class FileUtils {
             head = computeHashForChunk(fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, chunkSizeForFile));
 
             //Alternate way to calculate tail hash for files over 4GB.
-            final ByteBuffer bb = ByteBuffer.allocateDirect((int)chunkSizeForFile);
+            ByteBuffer bb = ByteBuffer.allocateDirect((int)chunkSizeForFile);
             int read;
             long position = Math.max(size - HASH_CHUNK_SIZE, 0);
-            while ((read = fileChannel.read(bb, position)) > 0) position += read;
+            while ((read = fileChannel.read(bb, position)) > 0) {
+                position += read;
+            }
             bb.flip();
             tail = computeHashForChunk(bb);
+
             return String.format("%016x", size + head + tail);
-        } catch (IOException e) {
+        } catch (FileNotFoundException e1) {
+            e1.printStackTrace();
+            return null;
+        }
+        catch (IOException e) {
             e.printStackTrace();
             return null;
-        } finally {
+        }finally {
             Util.close(fileChannel);
             Util.close(fis);
         }
     }
 
     private static long computeHashForChunk(ByteBuffer buffer) {
-        final LongBuffer longBuffer = buffer.order(ByteOrder.LITTLE_ENDIAN).asLongBuffer();
+        LongBuffer longBuffer = buffer.order(ByteOrder.LITTLE_ENDIAN).asLongBuffer();
         long hash = 0;
-        while (longBuffer.hasRemaining()) hash += longBuffer.get();
+        while (longBuffer.hasRemaining())
+            hash += longBuffer.get();
         return hash;
     }
 
 
     public static Uri getUri(Uri data) {
         Uri uri = data;
-        final Context ctx = VLCApplication.getAppContext();
-        if (data != null && ctx != null && TextUtils.equals(data.getScheme(), "content")) {
+        if (data != null && TextUtils.equals(data.getScheme(), "content")) {
             // Mail-based apps - download the stream to a temporary file and play it
-            if ("com.fsck.k9.attachmentprovider".equals(data.getHost()) || "gmail-ls".equals(data.getHost())) {
+            if(data.getHost().equals("com.fsck.k9.attachmentprovider")
+                    || data.getHost().equals("gmail-ls")) {
                 InputStream is = null;
                 OutputStream os = null;
-                Cursor cursor = null;
                 try {
-                    cursor = ctx.getContentResolver().query(data,
+                    Cursor cursor = VLCApplication.getAppContext().getContentResolver().query(data,
                             new String[]{MediaStore.MediaColumns.DISPLAY_NAME}, null, null, null);
-                    if (cursor != null && cursor.moveToFirst()) {
-                        final String filename = cursor.getString(cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)).replace("/", "");
-                        if (BuildConfig.DEBUG) Log.i(TAG, "Getting file " + filename + " from content:// URI");
-                        is = ctx.getContentResolver().openInputStream(data);
-                        if (is == null) return data;
+                    if (cursor != null) {
+                        cursor.moveToFirst();
+                        String filename = cursor.getString(cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME));
+                        cursor.close();
+                        Log.i(TAG, "Getting file " + filename + " from content:// URI");
+
+                        is = VLCApplication.getAppContext().getContentResolver().openInputStream(data);
                         os = new FileOutputStream(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY + "/Download/" + filename);
-                        final byte[] buffer = new byte[1024];
-                        int bytesRead;
-                        while ((bytesRead = is.read(buffer)) >= 0) os.write(buffer, 0, bytesRead);
+                        byte[] buffer = new byte[1024];
+                        int bytesRead = 0;
+                        while((bytesRead = is.read(buffer)) >= 0) {
+                            os.write(buffer, 0, bytesRead);
+                        }
                         uri = AndroidUtil.PathToUri(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY + "/Download/" + filename);
                     }
                 } catch (Exception e) {
                     Log.e(TAG, "Couldn't download file from mail URI");
-                    return null;
+                    return data;
                 } finally {
                     Util.close(is);
                     Util.close(os);
-                    Util.close(cursor);
                 }
             }
             // Media or MMS URI
@@ -383,9 +374,13 @@ public class FileUtils {
             } else {
                 ParcelFileDescriptor inputPFD;
                 try {
-                    inputPFD = ctx.getContentResolver().openFileDescriptor(data, "r");
-                    if (inputPFD == null) return data;
-                    uri = AndroidUtil.LocationToUri("fd://" + inputPFD.getFd());
+                    inputPFD = VLCApplication.getAppContext().getContentResolver().openFileDescriptor(data, "r");
+                    if (AndroidUtil.isHoneycombMr1OrLater)
+                        uri = AndroidUtil.LocationToUri("fd://" + inputPFD.getFd());
+                    else {
+                        String fdString = inputPFD.getFileDescriptor().toString();
+                        uri = AndroidUtil.LocationToUri("fd://" + fdString.substring(15, fdString.length() - 1));
+                    }
 //                    Cursor returnCursor =
 //                            getContentResolver().query(data, null, null, null, null);
 //                    if (returnCursor != null) {
@@ -398,33 +393,15 @@ public class FileUtils {
 //                        }
 //                        returnCursor.close();
 //                    }
-                } catch (FileNotFoundException|IllegalArgumentException e) {
+                } catch (FileNotFoundException e) {
                     Log.e(TAG, "Couldn't understand the intent");
-                    return null;
+                    return data;
                 } catch (SecurityException e) {
                     Log.e(TAG, "Permission is no longer valid");
-                    return null;
+                    return data;
                 }
             }
         }
         return uri;
-    }
-
-    @SuppressLint("PrivateApi")
-    public static String getStorageTag(final String uuid) {
-        if (!AndroidUtil.isMarshMallowOrLater) return null;
-        String volumeDescription = null;
-        try {
-            final StorageManager storageManager = VLCApplication.getAppContext().getSystemService(StorageManager.class);
-            final Class<?> classType = storageManager.getClass();
-            final Method findVolumeByUuid = classType.getDeclaredMethod("findVolumeByUuid", uuid.getClass());
-            findVolumeByUuid.setAccessible(true);
-            final Object volumeInfo = findVolumeByUuid.invoke(storageManager, uuid);
-            final Class volumeInfoClass = Class.forName("android.os.storage.VolumeInfo");
-            final Method getBestVolumeDescription = classType.getDeclaredMethod("getBestVolumeDescription", volumeInfoClass);
-            getBestVolumeDescription.setAccessible(true);
-            volumeDescription = (String) getBestVolumeDescription.invoke(storageManager, volumeInfo);
-        } catch (Throwable ignored) {}
-        return volumeDescription;
     }
 }

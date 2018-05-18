@@ -19,5 +19,4 @@
         android:layout_gravity="center"
         android:text="@string/directory_empty"
         android:visibility="gone"/>
-    <include layout="@layout/tv_time" />
 </FrameLayout>

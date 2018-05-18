@@ -20,7 +20,6 @@
  *****************************************************************************/
 package org.videolan.vlc.gui;
 
-import android.app.Activity;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -35,7 +34,7 @@ import org.videolan.vlc.gui.helpers.UiTools;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DebugLogActivity extends Activity implements DebugLogService.Client.Callback {
+public class DebugLogActivity extends BaseActivity implements DebugLogService.Client.Callback {
     public final static String TAG = "VLC/DebugLogActivity";
     private DebugLogService.Client mClient = null;
     private Button mStartButton = null;
@@ -44,7 +43,7 @@ public class DebugLogActivity extends Activity implements DebugLogService.Client
     private Button mClearButton = null;
     private Button mSaveButton = null;
     private ListView mLogView;
-    private List<String> mLogList = null;
+    private ArrayList<String> mLogList = null;
     private ArrayAdapter<String> mLogAdapter;
 
     @Override

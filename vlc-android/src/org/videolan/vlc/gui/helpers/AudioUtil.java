@@ -20,6 +20,7 @@
 package org.videolan.vlc.gui.helpers;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -31,14 +32,12 @@ import android.media.RingtoneManager;
 import android.net.Uri;
 import android.provider.MediaStore;
 import android.support.annotation.WorkerThread;
-import android.support.v4.app.FragmentActivity;
 import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
 import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.medialibrary.media.MediaWrapper;
-import org.videolan.vlc.BuildConfig;
 import org.videolan.vlc.R;
 import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.media.MediaUtils;
@@ -58,9 +57,9 @@ import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class AudioUtil {
@@ -83,7 +82,7 @@ public class AudioUtil {
 //     */
 //    public static AtomicReference<String> PLAYLIST_DIR = new AtomicReference<>();
 
-    public static void setRingtone(MediaWrapper song, FragmentActivity context){
+    public static void setRingtone(MediaWrapper song, Activity context){
         if (!Permissions.canWriteSettings(context)) {
             Permissions.checkWriteSettingsPermission(context, Permissions.PERMISSION_SYSTEM_RINGTONE);
             return;
@@ -137,9 +136,9 @@ public class AudioUtil {
             if (AndroidDevices.hasExternalStorage() && context.getExternalCacheDir() != null)
                 CACHE_DIR = context.getExternalCacheDir().getPath();
             else
-                CACHE_DIR = AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY + "/Android/data/" + BuildConfig.APPLICATION_ID + "/cache";
-        } catch (Exception|ExceptionInInitializerError e) { // catch NPE thrown by getExternalCacheDir()
-            CACHE_DIR = AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY + "/Android/data/" + BuildConfig.APPLICATION_ID + "/cache";
+                CACHE_DIR = AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY + "/Android/data/" + context.getPackageName() + "/cache";
+        } catch (Exception e) { // catch NPE thrown by getExternalCacheDir()
+            CACHE_DIR = AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY + "/Android/data/" + context.getPackageName() + "/cache";
         }
         ART_DIR.set(CACHE_DIR + "/art/");
         COVER_DIR.set(CACHE_DIR + "/covers/");
@@ -282,14 +281,15 @@ public class AudioUtil {
         return COVER_DIR.get() + (hash >= 0 ? "" + hash : "m" + (-hash)) + "_" + width;
     }
 
-    private static Bitmap getCoverFromMemCache(Context context, MediaWrapper media, int width) {
+    public static Bitmap getCoverFromMemCache(Context context, MediaWrapper media, int width) {
         Bitmap cover = null;
-        final BitmapCache cache = BitmapCache.getInstance();
+
         if (media != null && media.getArtist() != null && media.getAlbum() != null) {
+            final BitmapCache cache = BitmapCache.getInstance();
             cover = cache.getBitmapFromMemCache(getCoverCachePath(context, media, width));
         }
         if (cover == null && media != null && !TextUtils.isEmpty(media.getArtworkURL()) && media.getArtworkURL().startsWith("http")) {
-            cover = cache.getBitmapFromMemCache(media.getArtworkURL());
+            cover = HttpImageLoader.getBitmapFromIconCache(media.getArtworkURL());
         }
         return cover;
     }
@@ -329,9 +329,9 @@ public class AudioUtil {
                 }
             } else
 
-            // try to get it from VLC
-            if (coverPath == null || !cacheFile.exists())
-                coverPath = getCoverFromVlc(context, media);
+                // try to get it from VLC
+                if (coverPath == null || !cacheFile.exists())
+                    coverPath = getCoverFromVlc(context, media);
 
             // try to get the cover from android MediaStore
             if (coverPath == null || !(new File(coverPath)).exists())
@@ -374,9 +374,12 @@ public class AudioUtil {
 
     @WorkerThread
     public static Bitmap readCoverBitmap(String path, int width) {
-        if (path == null) return null;
-        if (path.startsWith("http")) return HttpImageLoader.downloadBitmap(path);
-        if (path.startsWith("file")) path = path.substring(7);
+        if (path == null)
+            return null;
+        if (path.startsWith("http"))
+            return HttpImageLoader.downloadBitmap(path);
+        if (path.startsWith("file"))
+            path = path.substring(7);
         Bitmap cover = null;
         BitmapFactory.Options options = new BitmapFactory.Options();
 
@@ -401,7 +404,7 @@ public class AudioUtil {
         return cover;
     }
 
-    public static Bitmap getCover(Context context, List<MediaWrapper> list, int width, boolean fromMemCache) {
+    public static Bitmap getCover(Context context, ArrayList<MediaWrapper> list, int width, boolean fromMemCache) {
         Bitmap cover = null;
         LinkedList<String> testedAlbums = new LinkedList<String>();
         for (MediaWrapper media : list) {
@@ -420,11 +423,11 @@ public class AudioUtil {
         return cover;
     }
 
-    public static Bitmap getCoverFromMemCache(Context context, List<MediaWrapper> list, int width) {
+    public static Bitmap getCoverFromMemCache(Context context, ArrayList<MediaWrapper> list, int width) {
         return getCover(context, list, width, true);
     }
 
-    public static Bitmap getCover(Context context, List<MediaWrapper> list, int width) {
+    public static Bitmap getCover(Context context, ArrayList<MediaWrapper> list, int width) {
         return getCover(context, list, width, false);
     }
 }

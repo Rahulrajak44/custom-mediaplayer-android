@@ -50,7 +50,6 @@
                 android:fitsSystemWindows="true"
                 vlc:title="@{item.title}"
                 vlc:theme="@style/Toolbar.VLC"
-                vlc:contentScrim="?attr/background_actionbar"
                 vlc:expandedTitleMarginEnd="64dp"
                 vlc:expandedTitleMarginStart="48dp"
                 vlc:layout_scrollFlags="scroll|exitUntilCollapsed" >
@@ -89,7 +88,6 @@
                 android:layout_marginRight="@dimen/info_progress_end_margin"
                 android:layout_marginEnd="@dimen/info_progress_end_margin"
                 style="@style/Widget.AppCompat.ProgressBar.Horizontal"
-                android:progressDrawable="?attr/gridview_progressbar"
                 android:background="@color/transparent"
                 android:indeterminate="false"
                 android:max="100"
@@ -185,11 +183,13 @@
                 android:layout_marginEnd="@dimen/default_margin"
                 vlc:layout_constraintTop_toBottomOf="@+id/info_path"
                 vlc:layout_constraintEnd_toEndOf="parent"
-                android:src="@drawable/ic_audiosub_circle_normal_o"
+                android:src="@drawable/ic_comment_white_24dp"
                 android:visibility="gone" />
             <android.support.v7.widget.RecyclerView
                 android:id="@+id/list"
                 android:layout_width="0dp"
+                android:overScrollMode="never"
+
                 android:layout_height="0dp"
                 vlc:layout_constraintTop_toBottomOf="@+id/extra_title"
                 vlc:layout_constraintBottom_toBottomOf="parent"
@@ -202,7 +202,6 @@
         </android.support.constraint.ConstraintLayout>
 
         <android.support.design.widget.FloatingActionButton
-            vlc:rippleColor="@color/orange50"
             android:id="@+id/fab"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

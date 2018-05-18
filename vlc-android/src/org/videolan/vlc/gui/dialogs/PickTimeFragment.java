@@ -23,7 +23,6 @@
 package org.videolan.vlc.gui.dialogs;
 
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.support.v4.app.DialogFragment;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -33,7 +32,7 @@ import android.widget.TextView;
 
 import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
-import org.videolan.vlc.gui.PlaybackServiceActivity;
+import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.gui.PlaybackServiceFragment;
 import org.videolan.vlc.gui.helpers.UiTools;
 
@@ -56,13 +55,9 @@ public abstract class PickTimeFragment extends DialogFragment implements View.On
     protected int mMaxTimeSize = 6;
     protected TextView mTVTimeToJump;
 
-    private PlaybackServiceActivity.Helper mHelper;
     protected PlaybackService mService;
 
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mHelper = new PlaybackServiceActivity.Helper(getActivity(), this);
+    public PickTimeFragment(){
     }
 
     @Override
@@ -119,7 +114,7 @@ public abstract class PickTimeFragment extends DialogFragment implements View.On
 
     @Override
     public void onFocusChange(View v, boolean hasFocus) {
-        ((TextView)v).setTextColor(hasFocus ? getResources().getColor(R.color.orange500) : mTextColor);
+        ((TextView)v).setTextColor(hasFocus ? ((VLCApplication)getActivity().getApplication()).getConfig().getColorAccent() : mTextColor);
     }
 
     @Override
@@ -222,13 +217,13 @@ public abstract class PickTimeFragment extends DialogFragment implements View.On
     @Override
     public void onStart() {
         super.onStart();
-        mHelper.onStart();
+        PlaybackServiceFragment.registerPlaybackService(this, this);
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        mHelper.onStop();
+        PlaybackServiceFragment.unregisterPlaybackService(this, this);
     }
 
     @Override

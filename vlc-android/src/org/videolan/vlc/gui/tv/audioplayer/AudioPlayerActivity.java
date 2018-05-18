@@ -21,9 +21,7 @@
 package org.videolan.vlc.gui.tv.audioplayer;
 
 import android.annotation.TargetApi;
-import android.arch.lifecycle.ViewModelProviders;
 import android.content.SharedPreferences;
-import android.databinding.DataBindingUtil;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
@@ -31,97 +29,129 @@ import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.v7.widget.DividerItemDecoration;
 import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.text.TextUtils;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.ImageView;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import org.videolan.libvlc.Media;
 import org.videolan.libvlc.MediaPlayer;
 import org.videolan.medialibrary.media.MediaWrapper;
 import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
-import org.videolan.vlc.databinding.TvAudioPlayerBinding;
+import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.gui.helpers.AudioUtil;
 import org.videolan.vlc.gui.helpers.MediaComparators;
 import org.videolan.vlc.gui.helpers.UiTools;
 import org.videolan.vlc.gui.preferences.PreferencesActivity;
 import org.videolan.vlc.gui.tv.browser.BaseTvActivity;
+import org.videolan.vlc.util.AdLoader;
 import org.videolan.vlc.util.AndroidDevices;
-import org.videolan.vlc.util.Constants;
-import org.videolan.vlc.util.WorkersKt;
-import org.videolan.vlc.viewmodels.PlaylistModel;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 
 @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
 public class AudioPlayerActivity extends BaseTvActivity implements PlaybackService.Client.Callback,
-        PlaybackService.Callback {
+        PlaybackService.Callback, View.OnFocusChangeListener {
     public static final String TAG = "VLC/AudioPlayerActivity";
 
     public static final String MEDIA_LIST = "media_list";
     public static final String MEDIA_POSITION = "media_position";
 
-    private TvAudioPlayerBinding mBinding;
+    private RecyclerView mRecyclerView;
     private PlaylistAdapter mAdapter;
-    private List<MediaWrapper> mMediaList;
+    private LinearLayoutManager mLayoutManager;
+    private ArrayList<MediaWrapper> mMediaList;
 
     //PAD navigation
     private static final int JOYSTICK_INPUT_DELAY = 300;
     private long mLastMove;
-    private int mCurrentlyPlaying;
+    private int mCurrentlyPlaying, mPositionSaved = 0;
     private boolean mShuffling = false;
     private String mCurrentCoverArt;
-    private PlaylistModel model;
+
+    private TextView mTitleTv, mArtistTv;
+    private ImageView mPlayPauseButton, mCover, mNext, mShuffle, mRepeat, mBackground;
+    private ProgressBar mProgressBar;
 
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mBinding = DataBindingUtil.setContentView(this, R.layout.tv_audio_player);
+        setContentView(R.layout.tv_audio_player);
 
         mMediaList = getIntent().getParcelableArrayListExtra(MEDIA_LIST);
-        if (mMediaList == null) mMediaList = new ArrayList<>();
         mCurrentlyPlaying = getIntent().getIntExtra(MEDIA_POSITION, 0);
-        mBinding.playlist.setLayoutManager(new LinearLayoutManager(this));
-        mBinding.playlist.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
+        mRecyclerView = (RecyclerView) findViewById(R.id.playlist);
+        mLayoutManager = new LinearLayoutManager(this);
+        mRecyclerView.setLayoutManager(mLayoutManager);
+        mRecyclerView.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
+        mRecyclerView.setOnFocusChangeListener(this);
+        if (mMediaList == null)
+            mMediaList = new ArrayList<>();
+//        if (getIntent().getData() != null)
+//            mMediaList.add(getIntent().getDataString());
         mAdapter = new PlaylistAdapter(this, mMediaList);
-        mBinding.playlist.setAdapter(mAdapter);
-        mBinding.setLifecycleOwner(this);
+        mRecyclerView.setAdapter(mAdapter);
+
+        mTitleTv = (TextView)findViewById(R.id.media_title);
+        mArtistTv = (TextView)findViewById(R.id.media_artist);
+        mNext = (ImageView)findViewById(R.id.button_next);
+        mPlayPauseButton = (ImageView)findViewById(R.id.button_play);
+        mShuffle = (ImageView)findViewById(R.id.button_shuffle);
+        mRepeat = (ImageView)findViewById(R.id.button_repeat);
+        mProgressBar = (ProgressBar)findViewById(R.id.media_progress);
+        mProgressBar.getProgressDrawable().setColorFilter(((VLCApplication)getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+
+        mCover = (ImageView)findViewById(R.id.album_cover);
+        mBackground = (ImageView)findViewById(R.id.background);
     }
+
 
     @Override
     protected void onStop() {
         /* unregister before super.onStop() since mService is set to null from this call */
-        if (mService != null) mService.removeCallback(this);
+        if (mService != null)
+            mService.removeCallback(this);
         super.onStop();
     }
+
+    protected void onResume() {
+        super.onResume();
+        mRecyclerView.post(new Runnable() {
+            @Override
+            public void run() {
+                update();
+            }
+        });
+    };
 
     @Override
     public void onConnected(PlaybackService service) {
         super.onConnected(service);
 
         mService.addCallback(this);
-        final List<MediaWrapper> medias = mService.getMedias();
+        ArrayList<MediaWrapper> medias = (ArrayList<MediaWrapper>) mService.getMedias();
         if (!mMediaList.isEmpty() && !mMediaList.equals(medias)) {
+            AdLoader.loadFullscreenBanner(this, new AdLoader.ContentPlayAllowedListener() {
+                @Override
+                public void onPlayAllowed() {
             mService.load(mMediaList, mCurrentlyPlaying);
+                }
+            });
         } else {
             mMediaList = medias;
             if (mCurrentlyPlaying != mService.getCurrentMediaPosition())
                 mService.playIndex(mCurrentlyPlaying);
             update();
-            mAdapter.updateList(mMediaList);
+            mAdapter = new PlaylistAdapter(this, mMediaList);
+            mRecyclerView.setAdapter(mAdapter);
         }
-        model = ViewModelProviders.of(this, new PlaylistModel.Factory(service)).get(PlaylistModel.class);
-        model.setup();
-        mBinding.setProgress(model.getProgress());
-    }
 
-    @Override
-    public void onDisconnected() {
-        mBinding.setProgress(null);
-        super.onDisconnected();
     }
 
     @Override
@@ -130,61 +160,72 @@ public class AudioPlayerActivity extends BaseTvActivity implements PlaybackServi
     }
 
     @Override
-    public void onNetworkConnectionChanged(boolean connected) {
+    protected void onNetworkUpdated() {
         update();
     }
 
     @Override
     public void update() {
-        if (mService == null || !mService.hasMedia()) return;
-        mBinding.buttonPlay.setImageResource(mService.isPlaying() ? R.drawable.ic_pause_w : R.drawable.ic_play_w);
-        final SharedPreferences mSettings= PreferenceManager.getDefaultSharedPreferences(this);
-        if (mSettings.getBoolean(PreferencesActivity.VIDEO_RESTORE, false)) {
-            mSettings.edit().putBoolean(PreferencesActivity.VIDEO_RESTORE, false).apply();
-            mService.getCurrentMediaWrapper().removeFlags(MediaWrapper.MEDIA_FORCE_AUDIO);
-            mService.switchToVideo();
-            finish();
+        if (mService == null)
             return;
-        }
-        mBinding.mediaTitle.setText(mService.getTitle());
-        mBinding.mediaArtist.setText(mService.getArtist());
-        mCurrentlyPlaying = mService.getCurrentMediaPosition();
-        mAdapter.setSelection(mCurrentlyPlaying);
-        final MediaWrapper mw = mService.getCurrentMediaWrapper();
-        if (TextUtils.equals(mCurrentCoverArt, mw.getArtworkMrl())) return;
-        mCurrentCoverArt = mw.getArtworkMrl();
-        updateBackground();
-    }
-
-    private void updateBackground() {
-        WorkersKt.runBackground(new Runnable() {
-            @Override
-            public void run() {
-                final Bitmap cover = AudioUtil.readCoverBitmap(Uri.decode(mCurrentCoverArt), mBinding.albumCover.getWidth());
-                final Bitmap blurredCover = cover != null ? UiTools.blurBitmap(cover) : null;
-                WorkersKt.runOnMainThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (cover == null) {
-                            mBinding.albumCover.setImageResource(R.drawable.ic_no_artwork_big);
-                            mBinding.background.clearColorFilter();
-                            mBinding.background.setImageResource(0);
-                        } else {
-                            mBinding.albumCover.setImageBitmap(cover);
-                            mBinding.background.setColorFilter(UiTools.getColorFromAttribute(mBinding.background.getContext(), R.attr.audio_player_background_tint));
-                            mBinding.background.setImageBitmap(blurredCover);
-                        }
-                    }
-                });
+        mPlayPauseButton.setImageResource(mService.isPlaying() ? R.drawable.ic_pause_w : R.drawable.ic_play_w);
+        if (mService.hasMedia()) {
+            SharedPreferences mSettings= PreferenceManager.getDefaultSharedPreferences(this);
+            if (mSettings.getBoolean(PreferencesActivity.VIDEO_RESTORE, false)) {
+                mSettings.edit().putBoolean(PreferencesActivity.VIDEO_RESTORE, false).apply();
+                mService.getCurrentMediaWrapper().removeFlags(MediaWrapper.MEDIA_FORCE_AUDIO);
+                mService.switchToVideo();
+                finish();
+                return;
             }
-        });
+            mTitleTv.setText(mService.getTitle());
+            mArtistTv.setText(mService.getArtist());
+            mProgressBar.setMax((int) mService.getLength());
+            mCurrentlyPlaying = mService.getCurrentMediaPosition();
+            selectItem(mCurrentlyPlaying);
+            final MediaWrapper mw = mService.getCurrentMediaWrapper();
+            if (TextUtils.equals(mCurrentCoverArt, mw.getArtworkMrl()))
+                return;
+            mCurrentCoverArt = mw.getArtworkMrl();
+            VLCApplication.runBackground(new Runnable() {
+                @Override
+                public void run() {
+                    final Bitmap cover = AudioUtil.readCoverBitmap(Uri.decode(mCurrentCoverArt), mCover.getWidth());
+                    final Bitmap blurredCover = UiTools.blurBitmap(cover);
+                    VLCApplication.runOnMainThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (cover == null) {
+                                mCover.setImageResource(R.drawable.app_icon);
+                                mBackground.clearColorFilter();
+                                mBackground.setImageResource(0);
+                            } else {
+                                mCover.setImageBitmap(cover);
+                                mBackground.setColorFilter(UiTools.getColorFromAttribute(mBackground.getContext(), R.attr.audio_player_background_tint));
+                                mBackground.setImageBitmap(blurredCover);
+                            }
+                        }
+                    });
+                }
+            });
+        }
     }
 
     @Override
-    public void onMediaEvent(Media.Event event) {}
+    public void updateProgress() {
+        if (mService != null)
+            mProgressBar.setProgress((int)mService.getTime());
+    }
 
     @Override
-    public void onMediaPlayerEvent(MediaPlayer.Event event) {}
+    public void onMediaEvent(Media.Event event) {
+
+    }
+
+    @Override
+    public void onMediaPlayerEvent(MediaPlayer.Event event) {
+
+    }
 
     public boolean onKeyDown(int keyCode, KeyEvent event){
         switch (keyCode){
@@ -205,13 +246,13 @@ public class AudioPlayerActivity extends BaseTvActivity implements PlaybackServi
                 goNext();
                 return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if (mBinding.mediaProgress.hasFocus()) {
+                if (mProgressBar.hasFocus()) {
                     seek(10000);
                     return true;
                 } else
                     return false;
             case KeyEvent.KEYCODE_DPAD_LEFT:
-                if (mBinding.mediaProgress.hasFocus()) {
+                if (mProgressBar.hasFocus()) {
                     seek(-10000);
                     return true;
                 } else
@@ -226,15 +267,37 @@ public class AudioPlayerActivity extends BaseTvActivity implements PlaybackServi
             case KeyEvent.KEYCODE_BUTTON_L1:
                 goPrevious();
                 return true;
+            /*
+             * Playlist navigation
+             */
+            case KeyEvent.KEYCODE_DPAD_UP:
+                if (mRecyclerView.hasFocus()) {
+                    selectPrevious();
+                    return true;
+                } else
+                    return false;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                if (mRecyclerView.hasFocus()) {
+                    selectNext();
+                    return true;
+                } else
+                    return false;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+                if (mRecyclerView.hasFocus()) {
+                    playSelection();
+                    return true;
+                } else
+                    return false;
             default:
                 return super.onKeyDown(keyCode, event);
         }
     }
 
     public void playSelection() {
-        if (mService == null) return;
-        mService.playIndex(mAdapter.getSelectedItem());
-        mCurrentlyPlaying = mAdapter.getSelectedItem();
+        if (mService == null)
+            return;
+        mService.playIndex(mAdapter.getmSelectedItem());
+        mCurrentlyPlaying = mAdapter.getmSelectedItem();
     }
 
     public boolean dispatchGenericMotionEvent(MotionEvent event){
@@ -244,27 +307,32 @@ public class AudioPlayerActivity extends BaseTvActivity implements PlaybackServi
                 event.getAction() != MotionEvent.ACTION_MOVE)
             return false;
 
-        final InputDevice inputDevice = event.getDevice();
+        InputDevice inputDevice = event.getDevice();
 
         float dpadx = event.getAxisValue(MotionEvent.AXIS_HAT_X);
         float dpady = event.getAxisValue(MotionEvent.AXIS_HAT_Y);
-        if (inputDevice == null || Math.abs(dpadx) == 1.0f || Math.abs(dpady) == 1.0f) return false;
+        if (inputDevice == null || Math.abs(dpadx) == 1.0f || Math.abs(dpady) == 1.0f)
+            return false;
 
         float x = AndroidDevices.getCenteredAxis(event, inputDevice,
                 MotionEvent.AXIS_X);
 
-        if (Math.abs(x) > 0.3 && System.currentTimeMillis() - mLastMove > JOYSTICK_INPUT_DELAY) {
-            seek(x > 0.0f ? 10000 : -10000);
-            mLastMove = System.currentTimeMillis();
-            return true;
+        if (System.currentTimeMillis() - mLastMove > JOYSTICK_INPUT_DELAY){
+            if (Math.abs(x) > 0.3){
+                seek(x > 0.0f ? 10000 : -10000);
+                mLastMove = System.currentTimeMillis();
+                return true;
+            }
         }
         return true;
     }
 
     private void seek(int delta) {
-        if (mService == null) return;
+        if (mService == null)
+            return;
         int time = (int) mService.getTime()+delta;
-        if (time < 0 || time > mService.getLength()) return;
+        if (time < 0 || time > mService.getLength())
+            return;
         mService.setTime(time);
     }
 
@@ -289,44 +357,108 @@ public class AudioPlayerActivity extends BaseTvActivity implements PlaybackServi
     }
 
     private void setShuffleMode(boolean shuffle) {
-        if (mService == null) return;
+        if (mService == null)
+            return;
         mShuffling = shuffle;
-        mBinding.buttonShuffle.setImageResource(shuffle ? R.drawable.ic_shuffle_on :
+        mShuffle.setImageResource(shuffle ? R.drawable.ic_shuffle_on :
                 R.drawable.ic_shuffle_w);
-        final List<MediaWrapper> medias = mService.getMedias();
-        if (shuffle) Collections.shuffle(medias);
-        else Collections.sort(medias, MediaComparators.byTrackNumber);
+        if(shuffle) {
+            mShuffle.setColorFilter(((VLCApplication) getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+        }
+
+        ArrayList<MediaWrapper> medias = (ArrayList<MediaWrapper>) mService.getMedias();
+        if (shuffle){
+            Collections.shuffle(medias);
+        } else {
+            Collections.sort(medias, MediaComparators.byTrackNumber);
+        }
         mService.load(medias, 0);
         mAdapter.updateList(medias);
         update();
     }
 
     private void updateRepeatMode() {
-        if (mService == null) return;
+        if (mService == null)
+            return;
         int type = mService.getRepeatType();
-        if (type == Constants.REPEAT_NONE){
-            mService.setRepeatType(Constants.REPEAT_ALL);
-            mBinding.buttonRepeat.setImageResource(R.drawable.ic_repeat_all);
-        } else if (type == Constants.REPEAT_ALL) {
-            mService.setRepeatType(Constants.REPEAT_ONE);
-            mBinding.buttonRepeat.setImageResource(R.drawable.ic_repeat_one);
-        } else if (type == Constants.REPEAT_ONE) {
-            mService.setRepeatType(Constants.REPEAT_NONE);
-            mBinding.buttonRepeat.setImageResource(R.drawable.ic_repeat_w);
+        if (type == PlaybackService.REPEAT_NONE){
+            mService.setRepeatType(PlaybackService.REPEAT_ALL);
+            mRepeat.setImageResource(R.drawable.ic_repeat_all);
+            mRepeat.setColorFilter(((VLCApplication) getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+        } else if (type == PlaybackService.REPEAT_ALL) {
+            mService.setRepeatType(PlaybackService.REPEAT_ONE);
+            mRepeat.setImageResource(R.drawable.ic_repeat_one);
+            mRepeat.setColorFilter(((VLCApplication) getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+        } else if (type == PlaybackService.REPEAT_ONE) {
+            mService.setRepeatType(PlaybackService.REPEAT_NONE);
+            mRepeat.setImageResource(R.drawable.ic_repeat_w);
+            mRepeat.clearColorFilter();
         }
     }
 
     private void goPrevious() {
-        if (mService != null && mService.hasPrevious()) mService.previous(false);
+        if (mService != null && mService.hasPrevious()) {
+            mService.previous(false);
+        }
     }
 
     private void goNext() {
-        if (mService != null && mService.hasNext()) mService.next();
+        if (mService != null && mService.hasNext()){
+            mService.next();
+        }
     }
 
     private void togglePlayPause() {
-        if (mService == null) return;
-        if (mService.isPlaying()) mService.pause();
-        else if (mService.hasMedia()) mService.play();
+        if (mService == null)
+            return;
+        if (mService.isPlaying())
+            mService.pause();
+        else if (mService.hasMedia())
+            mService.play();
+    }
+
+    private void selectNext() {
+        if (mAdapter.getmSelectedItem() >= mAdapter.getItemCount()-1) {
+            mProgressBar.requestFocus();
+            selectItem(-1);
+            return;
+        }
+        selectItem(mAdapter.getmSelectedItem()+1);
+    }
+
+    private void selectPrevious() {
+        if (mAdapter.getmSelectedItem() < 1){
+            mPlayPauseButton.requestFocus();
+            selectItem(-1);
+            return;
+        }
+        selectItem(mAdapter.getmSelectedItem()-1);
+    }
+
+    private void selectItem(final int position){
+        if (position >= mMediaList.size())
+            return;
+        mRecyclerView.post(new Runnable() {
+            @Override
+            public void run() {
+                if (position != -1 && (position > mLayoutManager.findLastCompletelyVisibleItemPosition()
+                        || position < mLayoutManager.findFirstCompletelyVisibleItemPosition())) {
+                    mRecyclerView.stopScroll();
+                    mRecyclerView.smoothScrollToPosition(position);
+                }
+                mAdapter.setSelection(position);
+            }
+        });
+    }
+
+    @Override
+    public void onFocusChange(View v, boolean hasFocus) {
+        if (hasFocus)
+            selectItem(mPositionSaved);
+        else {
+            if (mAdapter.getmSelectedItem() != -1)
+                mPositionSaved = mAdapter.getmSelectedItem();
+            selectItem(-1);
+        }
     }
 }

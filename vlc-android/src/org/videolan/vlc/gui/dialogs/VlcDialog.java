@@ -72,8 +72,7 @@ public abstract class VlcDialog<T extends Dialog, B extends android.databinding.
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (mVlcDialog != null)
-            mVlcDialog.dismiss();
+        mVlcDialog.dismiss();
         getActivity().finish();
     }
 

@@ -19,48 +19,52 @@
  *****************************************************************************/
 package org.videolan.vlc.gui;
 
+import android.support.v4.content.ContextCompat;
+import android.support.v4.graphics.ColorUtils;
+import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
 import org.videolan.medialibrary.media.MediaLibraryItem;
 import org.videolan.medialibrary.media.MediaWrapper;
+import org.videolan.vlc.R;
+import org.videolan.vlc.config.Config;
 import org.videolan.vlc.databinding.HistoryItemBinding;
-import org.videolan.vlc.gui.helpers.SelectorViewHolder;
 import org.videolan.vlc.interfaces.IEventsHandler;
 import org.videolan.vlc.util.Util;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 
-public class HistoryAdapter extends DiffUtilAdapter<MediaWrapper, HistoryAdapter.ViewHolder> {
+public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.ViewHolder> {
 
     public final static String TAG = "VLC/HistoryAdapter";
 
     private IEventsHandler mEventsHandler;
+    private ArrayList<MediaWrapper> mMediaList = new ArrayList<>();
     private LayoutInflater mLayoutInflater;
+    private Config config;
 
-    public class ViewHolder extends SelectorViewHolder<HistoryItemBinding> {
+    public class ViewHolder extends RecyclerView.ViewHolder {
+        HistoryItemBinding binding;
 
         public ViewHolder(HistoryItemBinding binding) {
-            super(binding);
+            super(binding.getRoot());
             this.binding = binding;
             binding.setHolder(this);
         }
 
-        public void onClick(View v) {
+        public void onClick(View v){
             int position = getLayoutPosition();
-            mEventsHandler.onClick(v, position, getItem(position));
+            mEventsHandler.onClick(v, position, mMediaList.get(position));
         }
 
         public boolean onLongClick(View v) {
             int position = getLayoutPosition();
-            return mEventsHandler.onLongClick(v, position, getItem(position));
-        }
-
-        @Override
-        protected boolean isSelected() {
-            return getItem(getLayoutPosition()).hasStateFlags(MediaLibraryItem.FLAG_SELECTED);
+            return mEventsHandler.onLongClick(v, position, mMediaList.get(position));
         }
     }
 
@@ -68,13 +72,26 @@ public class HistoryAdapter extends DiffUtilAdapter<MediaWrapper, HistoryAdapter
         mEventsHandler = eventsHandler;
     }
 
+    public void setConfig(Config config) {
+        this.config = config;
+    }
+
+    public void setList(MediaWrapper[] list) {
+        mMediaList = new ArrayList<>(Arrays.asList(list));
+        notifyDataSetChanged();
+    }
+
     List<MediaWrapper> getSelection() {
-        final List<MediaWrapper> selection = new LinkedList<>();
-        for (MediaWrapper media : getDataset()) {
+        List<MediaWrapper> selection = new LinkedList<>();
+        for (MediaWrapper media : mMediaList) {
             if (media.hasStateFlags(MediaLibraryItem.FLAG_SELECTED))
                 selection.add(media);
         }
         return selection;
+    }
+
+    List<MediaWrapper> getAll() {
+        return mMediaList;
     }
 
     @Override
@@ -86,10 +103,10 @@ public class HistoryAdapter extends DiffUtilAdapter<MediaWrapper, HistoryAdapter
 
     @Override
     public void onBindViewHolder(ViewHolder holder, int position) {
-        final MediaWrapper media = getItem(position);
+        final MediaWrapper media = mMediaList.get(position);
         boolean isSelected = media.hasStateFlags(MediaLibraryItem.FLAG_SELECTED);
         holder.binding.setMedia(media);
-        holder.selectView(isSelected);
+        holder.binding.setBgColor(isSelected ? ColorUtils.setAlphaComponent(config.getColorAccent(), 0x64) : ContextCompat.getColor(holder.itemView.getContext(),R.color.transparent));
     }
 
     @Override
@@ -97,7 +114,7 @@ public class HistoryAdapter extends DiffUtilAdapter<MediaWrapper, HistoryAdapter
         if (Util.isListEmpty(payloads))
             super.onBindViewHolder(holder, position, payloads);
         else
-            holder.selectView(((MediaLibraryItem) payloads.get(0)).hasStateFlags(MediaLibraryItem.FLAG_SELECTED));
+            holder.binding.setBgColor(((MediaLibraryItem) payloads.get(0)).hasStateFlags(MediaLibraryItem.FLAG_SELECTED) ? ColorUtils.setAlphaComponent(config.getColorAccent(), 0x64) : ContextCompat.getColor(holder.itemView.getContext(),R.color.transparent));
     }
 
     @Override
@@ -107,9 +124,27 @@ public class HistoryAdapter extends DiffUtilAdapter<MediaWrapper, HistoryAdapter
 
     @Override
     public int getItemCount() {
-        return getDataset().size();
+        return mMediaList.size();
     }
 
-    @Override
-    protected void onUpdateFinished() {}
+    public boolean isEmpty() {
+        return mMediaList.isEmpty();
+    }
+
+    public void clear() {
+        mMediaList.clear();
+        notifyDataSetChanged();
+    }
+
+    public void remove(final int position) {
+//        VLCApplication.runBackground(new Runnable() {
+//            @Override
+//            public void run() {
+                //TODO
+                //MediaDatabase.getInstance().deleteHistoryUri(mMediaList.get(position).getUri().toString());
+//            }
+//        });
+        mMediaList.remove(position);
+        notifyItemRemoved(position);
+    }
 }

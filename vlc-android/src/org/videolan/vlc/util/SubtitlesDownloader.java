@@ -28,20 +28,22 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.support.annotation.WorkerThread;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.preference.PreferenceManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
 
+import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.medialibrary.media.MediaWrapper;
 import org.videolan.vlc.BuildConfig;
 import org.videolan.vlc.R;
@@ -52,15 +54,15 @@ import org.videolan.vlc.media.MediaDatabase;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.MissingResourceException;
 import java.util.Set;
@@ -75,14 +77,13 @@ public class SubtitlesDownloader {
     private static final int DIALOG_HIDE = 2;
     private static final int DIALOG_UPDATE_PROGRESS = 3;
     private static final int DIALOG_UPDATE_MSG = 4;
-    private static final String TAG = "VLC/SubtitlesDownloader";
+    private final String TAG = "VLC/SubtitlesDownloader";
 
-    private static final String OpenSubtitlesAPIUrl = "http://api.opensubtitles.org/xml-rpc";
-    private static final String HTTP_USER_AGENT = "VLSub";
-    private static final String USER_AGENT = "VLSub 0.9";
-    private static final File SUBTITLES_DIRECTORY = new File(VLCApplication.getAppContext().getExternalFilesDir(null), "subs");
+    private final String OpenSubtitlesAPIUrl = "http://api.opensubtitles.org/xml-rpc";
+    private final String HTTP_USER_AGENT = "VLSub";
+    private final String USER_AGENT = "VLSub 0.9";
 
-    private Map<String, Object> map = null;
+    private HashMap<String, Object> map = null;
     private XMLRPCClient mClient;
     private String mToken = null;
     private Activity mContext;
@@ -96,44 +97,37 @@ public class SubtitlesDownloader {
         void onRequestEnded(boolean success);
     }
 
+    public void setActivity(Activity activity) {
+        mContext = activity;
+    }
+
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
-    public void downloadSubs(Activity context, final List<MediaWrapper> mediaList, Callback cb) {
-        mContext = context;
+    public void downloadSubs(final List<MediaWrapper> mediaList, Callback cb) {
         stop = false;
         mCallback = cb;
         Set<String> languages = null;
         try {
             languages = Collections.singleton(Locale.getDefault().getISO3Language().toLowerCase());
         } catch (MissingResourceException ignored) {}
-        languages = VLCApplication.getSettings().getStringSet("languages_download_list", languages);
+        if (AndroidUtil.isHoneycombOrLater) {
+            SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(VLCApplication.getAppContext());
+            languages = pref.getStringSet("languages_download_list", languages);
+        }
         if (languages == null) { // In case getDefault().getISO3Language() fails
             Toast.makeText(mContext, R.string.subs_dl_lang_fail, Toast.LENGTH_SHORT).show();
             return;
         }
-        final List<String> finalLanguages = new ArrayList<>(languages);
-        WorkersKt.runBackground(new Runnable() {
+        final ArrayList<String> finalLanguages = new ArrayList<>(languages);
+        VLCApplication.runBackground(new Runnable() {
             @Override
             public void run() {
-                SUBTITLES_DIRECTORY.mkdirs();
-                startDownload(mediaList, finalLanguages);
+                AndroidDevices.SUBTITLES_DIRECTORY.mkdirs();
+                if (logIn()){
+                    getSubtitles(mediaList, finalLanguages);
+                }
                 mHandler.sendEmptyMessage(DIALOG_HIDE);
             }
         });
-    }
-
-    @WorkerThread
-    private void startDownload(List<MediaWrapper> mediaList, List<String> finalLanguages) {
-        int loginCount = 3;
-        mHandler.sendEmptyMessage(DIALOG_SHOW);
-        while (--loginCount >= 0) {
-            if (logIn()) {
-                getSubtitles(mediaList, finalLanguages);
-                return;
-            }
-        }
-        showSnackBar(R.string.service_unavailable);
-        mHandler.sendEmptyMessage(DIALOG_HIDE);
-        stop = true;
     }
 
     private void exit() {
@@ -141,18 +135,24 @@ public class SubtitlesDownloader {
     }
 
     @SuppressWarnings("unchecked")
-    @WorkerThread
     private boolean logIn() {
+        mHandler.sendEmptyMessage(DIALOG_SHOW);
         try {
             mClient = new XMLRPCClient(new URL(OpenSubtitlesAPIUrl));
-            map = ((Map<String, Object>) mClient.call("LogIn","","","fre",USER_AGENT));
+            map = ((HashMap<String, Object>) mClient.call("LogIn","","","fre",USER_AGENT));
             mToken = (String) map.get("token");
         } catch (XMLRPCException e) {
             if (BuildConfig.DEBUG) Log.e(TAG, "logIn", e);
+            showSnackBar(R.string.service_unavailable);
+            mHandler.sendEmptyMessage(DIALOG_HIDE);
+            stop = true;
             return false;
         } catch (Throwable e){ //for various service outages
             if (BuildConfig.DEBUG) Log.e(TAG, "logIn", e);
             e.printStackTrace();
+            showSnackBar(R.string.service_unavailable);
+            mHandler.sendEmptyMessage(DIALOG_HIDE);
+            stop = true;
             return false;
         }
         map = null;
@@ -164,7 +164,7 @@ public class SubtitlesDownloader {
         if (mToken == null)
             return;
         try {
-            map = ((Map<String, Object>)  mClient.call("LogOut", mToken));
+            map = ((HashMap<String, Object>)  mClient.call("LogOut", mToken));
         } catch (Throwable e){ //for various service outages
             Log.w("subtitles", "XMLRPCException", e);
         }
@@ -175,53 +175,48 @@ public class SubtitlesDownloader {
     @SuppressWarnings("unchecked")
     private void getSubtitles(final List<MediaWrapper> mediaList, List<String> languages) {
         mHandler.obtainMessage(DIALOG_UPDATE_MSG,R.string.downloading_subtitles, 0).sendToTarget();
-        final ListIterator<String> iter = languages.listIterator();
-        while (iter.hasNext()) {
-            final String language = iter.next();
-            final String compliant = getCompliantLanguageID(language);
-            if (!language.equals(compliant)) iter.set(compliant);
-        }
+        for (String language : languages)
+            language = getCompliantLanguageID(language);
         final boolean single = mediaList.size() == 1;
-        final List<MediaWrapper> notFoundFiles = new ArrayList<>();
-        final Map<String, String> index = new HashMap<>();
-        final Map<String, List<String>> success = new HashMap<>();
-        final Map<String, List<String>> fails = new HashMap<>();
-        List<Map<String, String>> videoSearchList = prepareRequestList(mediaList, languages, index, true);
+        final ArrayList<MediaWrapper> notFoundFiles = new ArrayList<>();
+        final HashMap<String, String> index = new HashMap<>();
+        final HashMap<String, ArrayList<String>> success = new HashMap<>();
+        final HashMap<String, ArrayList<String>> fails = new HashMap<>();
+        ArrayList<HashMap<String, String>> videoSearchList = prepareRequestList(mediaList, languages, index, true);
+        Object[] subtitleMaps;
         if (!videoSearchList.isEmpty()) {
-            int retryCount = 3;
-            while (--retryCount >= 0) {
-                try {
-                    map = (Map<String, Object>) mClient.call("SearchSubtitles", mToken, videoSearchList);
-                } catch (Throwable e) { //for various service outages
-                    map = null;
-                }
-            }
-            if (map == null) {
+            try {
+                map = (HashMap<String, Object>) mClient.call("SearchSubtitles", mToken, videoSearchList);
+            } catch (Throwable e) { //for various service outages
                 stop = true;
                 showSnackBar(R.string.service_unavailable);
                 return;
             }
             if(!stop && map.get("data") instanceof Object[]) {
-                final Object[] subtitleMaps = ((Object[]) map.get("data"));
-                if (!single) mHandler.obtainMessage(DIALOG_UPDATE_PROGRESS, mediaList.size(), 0).sendToTarget();
+                subtitleMaps = ((Object[]) map.get("data"));
+                if (!single)
+                    mHandler.obtainMessage(DIALOG_UPDATE_PROGRESS, mediaList.size(), 0).sendToTarget();
                 if (subtitleMaps.length > 0){
+                    String srtFormat, movieHash, fileUrl, fileName, subLanguageID, subDownloadLink;
                     for (Object map : subtitleMaps){
-                        if (stop) break;
-                        final String srtFormat = ((Map<String, String>) map).get("SubFormat");
-                        final String movieHash = ((Map<String, String>) map).get("MovieHash");
-                        final String subLanguageID = ((Map<String, String>) map).get("SubLanguageID");
-                        final String subDownloadLink = ((Map<String, String>) map).get("SubDownloadLink");
-                        final String fileUrl = index.get(movieHash);
-                        if (fileUrl == null) return;
+                        if (stop)
+                            break;
+                        srtFormat = ((HashMap<String, String>) map).get("SubFormat");
+                        movieHash = ((HashMap<String, String>) map).get("MovieHash");
+                        subLanguageID = ((HashMap<String, String>) map).get("SubLanguageID");
+                        subDownloadLink = ((HashMap<String, String>) map).get("SubDownloadLink");
+                        fileUrl = index.get(movieHash);
+                        if (fileUrl == null)
+                            return;
 
-                        final String fileName = fileUrl.substring(fileUrl.lastIndexOf('/') + 1);
-                        if (success.containsKey(fileName) && success.get(fileName).contains(subLanguageID)) {
+                        fileName = fileUrl.substring(fileUrl.lastIndexOf('/') + 1);
+                        if (success.containsKey(fileName) && success.get(fileName).contains(subLanguageID)){
                             continue;
                         } else {
                             if (success.containsKey(fileName))
                                 success.get(fileName).add(subLanguageID);
                             else {
-                                List<String> newLanguage = new ArrayList<>();
+                                ArrayList<String> newLanguage = new ArrayList<>();
                                 newLanguage.add(subLanguageID);
                                 success.put(fileName, newLanguage);
                             }
@@ -232,20 +227,21 @@ public class SubtitlesDownloader {
                     }
                 }
             }
-            videoSearchList.clear();
+            if (videoSearchList != null)
+                videoSearchList.clear();
             index.clear();
         }
 
         //Second pass
-        for (MediaWrapper media : mediaList) {
-            if (media == null) return;
-            final String fileName = media.getUri().getLastPathSegment();
-            if (!success.containsKey(fileName)) notFoundFiles.add(media);
+        for (MediaWrapper media : mediaList){
+            String fileName = media.getUri().getLastPathSegment();
+            if (!success.containsKey(fileName))
+                notFoundFiles.add(media);
         }
         if (!stop && !notFoundFiles.isEmpty() &&
                 !(videoSearchList = prepareRequestList(notFoundFiles, languages, index, false)).isEmpty()) {
             try {
-                map = (Map<String, Object>) mClient.call("SearchSubtitles", mToken,
+                map = (HashMap<String, Object>) mClient.call("SearchSubtitles", mToken,
                         videoSearchList);
             } catch (Throwable e) { //for various service outages
                 stop = true;
@@ -253,58 +249,65 @@ public class SubtitlesDownloader {
                 return;
             }
             if (map.get("data") instanceof Object[]) {
-                final Object[] subtitleMaps = ((Object[]) map.get("data"));
+                subtitleMaps = ((Object[]) map.get("data"));
                 if (subtitleMaps.length > 0) {
-                    final Object[] paths = index.values().toArray();
-                    for (Object subtitleMap : subtitleMaps) {
-                        if (stop) break;
-                        final Map<String, Object> resultMap = (Map<String, Object>) subtitleMap;
-                        final String srtFormat = (String) resultMap.get("SubFormat");
-                        final String queryNumber = (String) resultMap.get("QueryNumber");
-                        final String subLanguageID = (String) resultMap.get("SubLanguageID");
-                        final String subDownloadLink = (String) resultMap.get("SubDownloadLink");
-                        final String fileUrl = (String) paths[Integer.getInteger(queryNumber, 0) / languages.size()];
+                    String srtFormat, fileUrl, fileName, subLanguageID, subDownloadLink;
+                    HashMap<String, Object> resultMap;
+                    Object[] paths = index.values().toArray();
+                    for (int i = 0; i < subtitleMaps.length; ++i) {
+                        if (stop)
+                            break;
+                        resultMap = (HashMap<String, Object>) subtitleMaps[i];
+                        srtFormat = (String) resultMap.get("SubFormat");
+                        String queryNumber = (String) resultMap.get("QueryNumber");
+                        subLanguageID = (String) resultMap.get("SubLanguageID");
+                        subDownloadLink = (String) resultMap.get("SubDownloadLink");
+                        fileUrl = (String) paths[Integer.getInteger(queryNumber, 0).intValue()/languages.size()];
                         if (fileUrl == null) //we keep only result for exact matching name
                             continue;
-                        final String fileName = fileUrl.substring(fileUrl.lastIndexOf('/') + 1);
-                        if (success.containsKey(fileName) && success.get(fileName).contains(subLanguageID)) {
+                        fileName = fileUrl.substring(fileUrl.lastIndexOf('/') + 1);
+                        if (success.containsKey(fileName) && success.get(fileName).contains(subLanguageID)){
                             continue;
                         } else {
                             if (success.containsKey(fileName))
                                 success.get(fileName).add(subLanguageID);
                             else {
-                                final List<String> newLanguage = new ArrayList<>();
+                                ArrayList<String> newLanguage = new ArrayList<>();
                                 newLanguage.add(subLanguageID);
                                 success.put(fileName, newLanguage);
                             }
                         }
                         downloadSubtitles(subDownloadLink, fileUrl, fileName, srtFormat, subLanguageID);
-                        if (!single) mHandler.obtainMessage(DIALOG_UPDATE_PROGRESS, mediaList.size(), success.size()).sendToTarget();
+                        if (!single)
+                            mHandler.obtainMessage(DIALOG_UPDATE_PROGRESS, mediaList.size(), success.size()).sendToTarget();
                     }
                 }
             }
         }
         //fill fails list
-        for (MediaWrapper media : mediaList) {
-            if (media == null) continue;
-            final String fileName = media.getUri().getLastPathSegment();
-            if (!success.containsKey(fileName)) {
-                final List<String> langs = new ArrayList<>();
-                for (String language : languages)
-                    langs.add(language);
+        for (MediaWrapper media : mediaList){
+            String fileName;
+            fileName = media.getUri().getLastPathSegment();
+            if (!success.containsKey(fileName)){
+                ArrayList<String> langs = new ArrayList<>();
+                for (String language : languages) {
+                    langs.add(getCompliantLanguageID(language));
+                }
                 fails.put(fileName, langs);
             } else {
-                final List<String> langs = new ArrayList<>();
+                ArrayList<String> langs = new ArrayList<>();
                 for (String language : languages) {
-                    if (!success.get(fileName).contains(language))
-                        langs.add(language);
+                    String langID = getCompliantLanguageID(language);
+                    if (!success.get(fileName).contains(langID)){
+                        langs.add(langID);
+                    }
                 }
                 if (!langs.isEmpty())
                     fails.put(fileName, langs);
             }
         }
         if (mCallback != null)
-            WorkersKt.runOnMainThread(new Runnable() {
+            mHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     mCallback.onRequestEnded(!success.isEmpty());
@@ -314,19 +317,23 @@ public class SubtitlesDownloader {
             if (single){
                 stop = true;
                 showSnackBar(buildSumup(success, fails, true));
-            } else
+            } else {
                 showSumup(buildSumup(success, fails, false));
+            }
         }
         logOut();
     }
 
     private void downloadSubtitles(String subUrl, String path, String fileName, String subFormat, String language){
-        if (mToken == null || path == null) return;
-        final StringBuilder sb = new StringBuilder();
-        final String name = fileName.lastIndexOf('.') > 0 ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
-        sb.append(SUBTITLES_DIRECTORY.getPath()).append('/').append(name).append('.').append(language).append('.').append(subFormat);
-        final String srtUrl = sb.toString();
+        if (mToken == null || path == null)
+            return;
+
+        StringBuilder sb = new StringBuilder();
+        String name = fileName.lastIndexOf('.') > 0 ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
+        sb.append(AndroidDevices.SUBTITLES_DIRECTORY.getPath()).append('/').append(name).append('.').append(language).append('.').append(subFormat);
+        String srtUrl = sb.toString();
         FileOutputStream f = null;
+        InputStream in = null;
         GZIPInputStream gzIS = null;
         URL url;
         HttpURLConnection urlConnection;
@@ -343,43 +350,52 @@ public class SubtitlesDownloader {
                 f.write(buffer, 0, length);
             }
             MediaDatabase.getInstance().saveSubtitle(srtUrl, fileName);
+        } catch (IOException e) {
+            if (BuildConfig.DEBUG) Log.e(TAG, "download fail", e);
         } catch (Throwable e) { //for various service outages
             if (BuildConfig.DEBUG) Log.e(TAG, "download fail", e);
-        } finally {
+        }finally{
             Util.close(f);
+            Util.close(in);
             Util.close(gzIS);
         }
+        return;
     }
 
-    private List<Map<String, String>> prepareRequestList(List<MediaWrapper> mediaList, List<String> languages, Map<String, String> index, boolean firstPass) {
-        final List<Map<String, String>> videoSearchList = new ArrayList<>();
+    private ArrayList<HashMap<String, String>> prepareRequestList(List<MediaWrapper> mediaList, List<String> languages, HashMap<String, String> index, boolean firstPass) {
+        ArrayList<HashMap<String, String>> videoSearchList = new ArrayList<>();
         for (MediaWrapper media : mediaList) {
-            if (stop) break;
-            if (media == null) continue;
+            if (stop)
+                break;
             String hash = null, tag = null;
             long fileLength = 0;
-            final Uri mediaUri = media.getUri();
+            Uri mediaUri = media.getUri();
             if (firstPass) {
-                if ("file".equals(mediaUri.getScheme())) {
+                if (FileUtils.canWrite(mediaUri)) {
                     File videoFile = new File(mediaUri.getPath());
                     hash = FileUtils.computeHash(videoFile);
                     fileLength = videoFile.length();
                 } //TODO network files
-                if (hash == null) continue;
+                if (hash == null)
+                    continue;
             } else { //Second pass, search by TAG (filename)
                 tag = mediaUri.getLastPathSegment();
             }
-            for (String language : languages){
-                if (stop) break;
-                final Map<String, String> video = new HashMap<>();
-                video.put("sublanguageid", language);
-                if (firstPass) {
+            HashMap<String, String> video;
+            for (String item : languages){
+                if (stop)
+                    break;
+                String languageID = getCompliantLanguageID(item);
+
+                video = new HashMap<>();
+                video.put("sublanguageid", languageID);
+                if (firstPass){
                     index.put(hash, mediaUri.getPath());
                     video.put("moviehash", hash);
                     video.put("moviebytesize", String.valueOf(fileLength));
                 } else if (!TextUtils.isEmpty(tag)) {
                     video.put("tag", tag);
-                    final int dotPos = tag.lastIndexOf('.');
+                    int dotPos = tag.lastIndexOf('.');
                     if (dotPos > -1)
                         index.put(tag.substring(0, dotPos), mediaUri.getPath());
                     else
@@ -392,8 +408,9 @@ public class SubtitlesDownloader {
     }
 
     private void showSumup(final String displayText) {
-        if (mContext == null) return;
-        WorkersKt.runOnMainThread(new Runnable(){
+        if (mContext == null)
+            return;
+        mHandler.post(new Runnable(){
             public void run() {
                 mSumUpDialog = new AlertDialog.Builder(mContext).setTitle(R.string.dialog_subloader_sumup)
                         .setMessage(displayText)
@@ -410,7 +427,7 @@ public class SubtitlesDownloader {
                             }
                         }).create();
                 //We catch these exceptions because context might disappear while loading/showing the dialog, no matter if we wipe it in onPause()
-                try {
+                try{
                     mSumUpDialog.show();
                 } catch (IllegalArgumentException | WindowManager.BadTokenException e){
                     e.printStackTrace();
@@ -419,35 +436,43 @@ public class SubtitlesDownloader {
         });
     }
 
-    private String buildSumup(Map<String, List<String>> success, Map<String, List<String>> fails, boolean single) {
-        final StringBuilder textToDisplay = new StringBuilder();
-        if (single) { // Text for the toast
+    private String buildSumup(HashMap<String, ArrayList<String>> success, HashMap<String, ArrayList<String>> fails, boolean single) {
+        StringBuilder textToDisplay = new StringBuilder();
+        if (single){ // Text for the toast
             if (!success.isEmpty()) {
-                for (Entry<String, List<String>> entry : success.entrySet()) {
+                for (Entry<String, ArrayList<String>> entry : success.entrySet()) {
                     textToDisplay.append(VLCApplication.getAppResources().getString(R.string.snack_subloader_sub_found));
                     if (entry.getValue().size() > 1)
                         textToDisplay.append(" ").append(entry.getValue().toString()).append("\n");
                 }
-            } else if (!fails.isEmpty()) {
-                for (Entry<String, List<String>> entry : fails.entrySet()){
+            }
+            if (!fails.isEmpty()) {
+                for (Entry<String, ArrayList<String>> entry : fails.entrySet()){
                     textToDisplay.append(VLCApplication.getAppResources().getString(R.string.snack_subloader_sub_not_found));
                     if (entry.getValue().size() > 1)
                         textToDisplay.append(" ").append(entry.getValue().toString()).append("\n");
                 }
             }
         } else { // Text for the dialog box
-            if (!success.isEmpty()) {
+            if (!success.isEmpty()){
                 textToDisplay.append(VLCApplication.getAppResources().getString(R.string.dialog_subloader_success)).append("\n");
-                for (Entry<String, List<String>> entry : success.entrySet()){
-                    final List<String> langs = entry.getValue();
-                    final String filename = entry.getKey();
+
+                for (Entry<String, ArrayList<String>> entry : success.entrySet()){
+                    ArrayList<String> langs = entry.getValue();
+                    String filename = entry.getKey();
                     textToDisplay.append("\n- ").append(filename).append(" ").append(langs.toString());
                 }
-            } else if (!fails.isEmpty()) {
+
+                if (fails.size()>0)
+                    textToDisplay.append("\n\n");
+            }
+
+            if (!fails.isEmpty()){
                 textToDisplay.append(VLCApplication.getAppResources().getString(R.string.dialog_subloader_fails)).append("\n");
-                for (Entry<String, List<String>> entry : fails.entrySet()){
-                    final List<String> langs = entry.getValue();
-                    final String filename = entry.getKey();
+
+                for (Entry<String, ArrayList<String>> entry : fails.entrySet()){
+                    ArrayList<String> langs = entry.getValue();
+                    String filename = entry.getKey();
                     textToDisplay.append("\n- ").append(filename).append(" ").append(langs.toString());
                 }
             }
@@ -458,25 +483,38 @@ public class SubtitlesDownloader {
     // Locale ID Control, because of OpenSubtitle support of ISO639-2 codes
     // e.g. French ID can be 'fra' or 'fre', OpenSubtitles considers 'fre' but Android Java Locale provides 'fra'
     private String getCompliantLanguageID(String language){
-        if (language.equals("system")) return getCompliantLanguageID(Locale.getDefault().getISO3Language());
-        if (language.equals("fra")) return "fre";
-        if (language.equals("deu")) return "ger";
-        if (language.equals("zho")) return "chi";
-        if (language.equals("ces")) return "cze";
-        if (language.equals("fas")) return "per";
-        if (language.equals("nld")) return "dut";
-        if (language.equals("ron")) return "rum";
-        if (language.equals("slk")) return "slo";
+        if (language.equals("system"))
+            return getCompliantLanguageID(Locale.getDefault().getISO3Language());
+        if (language.equals("fra"))
+            return "fre";
+        if (language.equals("deu"))
+            return "ger";
+        if (language.equals("zho"))
+            return "chi";
+        if (language.equals("ces"))
+            return "cze";
+        if (language.equals("fas"))
+            return "per";
+        if (language.equals("nld"))
+            return "dut";
+        if (language.equals("ron"))
+            return "rum";
+        if (language.equals("slk"))
+            return "slo";
         return language;
     }
 
     private void showSnackBar(int stringId) {
+        if (mContext == null)
+            return;
         showSnackBar(VLCApplication.getAppResources().getString(stringId));
     }
 
     private void showSnackBar(final String text) {
-        if (mContext instanceof AppCompatActivity && !(mContext instanceof VideoPlayerActivity) && !mContext.isFinishing()) {
-            WorkersKt.runOnMainThread(new Runnable() {
+        if (mContext == null)
+            return;
+        if (mContext instanceof AppCompatActivity && !(mContext instanceof VideoPlayerActivity)) {
+            mHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     View v = mContext.findViewById(R.id.fragment_placeholder);
@@ -486,7 +524,7 @@ public class SubtitlesDownloader {
                 }
             });
         } else {
-            WorkersKt.runOnMainThread(new Runnable() {
+            mHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     Toast.makeText(VLCApplication.getAppContext(), text, Toast.LENGTH_SHORT).show();
@@ -495,7 +533,7 @@ public class SubtitlesDownloader {
         }
     }
 
-    private Handler mHandler = new Handler(Looper.getMainLooper()) {
+    Handler mHandler = new Handler(Looper.getMainLooper()) {
         @Override
         public void handleMessage(Message msg) {
             if (mContext == null || mContext.isFinishing())

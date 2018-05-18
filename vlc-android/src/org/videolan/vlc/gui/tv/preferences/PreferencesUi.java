@@ -30,6 +30,7 @@ import android.os.Bundle;
 import android.widget.Toast;
 
 import org.videolan.vlc.R;
+import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.util.AndroidDevices;
 
 @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
@@ -50,7 +51,7 @@ public class PreferencesUi extends BasePreferenceFragment implements SharedPrefe
         super.onCreate(savedInstanceState);
 
         findPreference("enable_clone_mode").setVisible(false);
-        findPreference("tv_ui").setVisible(AndroidDevices.hasTsp);
+        findPreference("tv_ui").setVisible(AndroidDevices.hasTsp());
         findPreference("enable_black_theme").setVisible(false);
         findPreference("secondary_display_category").setVisible(false);
         findPreference("secondary_display_category_summary").setVisible(false);
@@ -74,7 +75,7 @@ public class PreferencesUi extends BasePreferenceFragment implements SharedPrefe
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
             switch (key) {
                 case "set_locale":
-                    Toast.makeText(getActivity(), R.string.set_locale_popup, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getActivity(),getString(R.string.set_locale_popup, ((VLCApplication) getActivity().getApplication()).getConfig().getAppName()), Toast.LENGTH_SHORT).show();
                     break;
                 case "tv_ui":
                     ((PreferencesActivity) getActivity()).setRestartApp();

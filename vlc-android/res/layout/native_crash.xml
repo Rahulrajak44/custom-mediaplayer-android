@@ -10,6 +10,7 @@
         android:layout_height="wrap_content"
         android:gravity="center_horizontal"
         android:text="@string/serious_crash"
+        android:id="@+id/crash_text"
         android:textSize="24sp" />
 
     <TextView
@@ -18,6 +19,7 @@
         android:layout_marginLeft="10dp"
         android:layout_marginRight="10dp"
         android:text="@string/help_us_send_log"
+        android:id="@+id/charsh_help_message"
         android:visibility="gone" />
 
     <ScrollView

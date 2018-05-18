@@ -24,7 +24,6 @@
 package org.videolan.vlc.gui.browser;
 
 import android.app.Activity;
-import android.arch.lifecycle.ViewModelProviders;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -32,13 +31,13 @@ import android.support.v4.app.Fragment;
 import android.text.TextUtils;
 import android.view.View;
 
+import org.videolan.libvlc.util.MediaBrowser;
 import org.videolan.medialibrary.media.MediaLibraryItem;
 import org.videolan.medialibrary.media.MediaWrapper;
 import org.videolan.vlc.R;
 import org.videolan.vlc.util.AndroidDevices;
 import org.videolan.vlc.util.FileUtils;
 import org.videolan.vlc.util.Strings;
-import org.videolan.vlc.viewmodels.browser.FilePickerProvider;
 
 public class FilePickerFragment extends FileBrowserFragment {
 
@@ -57,27 +56,29 @@ public class FilePickerFragment extends FileBrowserFragment {
 
     @Override
     public void onCreate(Bundle bundle) {
-        final Activity activity = getActivity();
-        if (activity != null && activity.getIntent() != null) {
-            final Uri uri = getActivity().getIntent().getData();
+        if (getActivity().getIntent() != null) {
+            Uri uri = getActivity().getIntent().getData();
             if (uri == null || TextUtils.equals(uri.getScheme(), "http")) {
-                activity.setIntent(null);
+                getActivity().setIntent(null);
             }
         }
         super.onCreate(bundle);
         mAdapter = new FilePickerAdapter(this);
+        mAdapter.setConfig(config);
         mRoot = defineIsRoot();
-    }
-
-    @Override
-    protected void setupBrowser() {
-        mProvider = ViewModelProviders.of(this, new FilePickerProvider.Factory(mMrl)).get(FilePickerProvider.class);
+        runOnBrowserThread(new Runnable() {
+            @Override
+            public void run() {
+                initMediaBrowser(FilePickerFragment.this);
+                mMediaBrowser.setIgnoreFileTypes("db,nfo,ini,jpg,jpeg,ljpg,gif,png,pgm,pgmyuv,pbm,pam,tga,bmp,pnm,xpm,xcf,pcx,tif,tiff,lbm,sfv");
+            }
+        });
     }
 
     @Override
     public void onViewCreated(View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        mBinding.empty.setText(R.string.no_subs_found);
+        mEmptyView.setText(R.string.no_subs_found);
     }
 
     @Override
@@ -89,8 +90,10 @@ public class FilePickerFragment extends FileBrowserFragment {
 
     public void onClick(View v, int position, MediaLibraryItem item) {
         final MediaWrapper media = (MediaWrapper) item;
-        if (media.getType() == MediaWrapper.TYPE_DIR) browse(media, true);
-        else pickFile(media);
+        if (media.getType() == MediaWrapper.TYPE_DIR)
+            browse(media, position, true);
+        else
+            pickFile(media);
 
     }
     void pickFile(MediaWrapper mw){
@@ -101,26 +104,40 @@ public class FilePickerFragment extends FileBrowserFragment {
     }
 
     public void browseUp() {
-        if (mRoot) getActivity().finish();
-        else if (TextUtils.equals(Strings.removeFileProtocole(mMrl), AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY)) {
+        if (mRoot)
+            getActivity().finish();
+        else if (TextUtils.equals(Strings.removeFileProtocole(mMrl), ROOT)) {
             mMrl = null;
             mRoot = true;
-            mProvider.browseRoot();
-        } else if (mMrl != null) {
-            final MediaWrapper mw = new MediaWrapper(Uri.parse(FileUtils.getParent(mMrl)));
-            browse(mw, false);
+            mAdapter.clear();
+            browseRoot();
+        } else {
+            MediaWrapper mw = new MediaWrapper(Uri.parse(FileUtils.getParent(mMrl)));
+            browse(mw, 0, false);
         }
     }
 
-    protected boolean defineIsRoot() {
-        if (mMrl == null) return true;
+    public boolean defineIsRoot() {
+        if (mMrl == null)
+            return true;
         if (mMrl.startsWith("file")) {
-            final String path = Strings.removeFileProtocole(mMrl);
+            String path = Strings.removeFileProtocole(mMrl);
             for (String directory : rootDirectories) {
                 if (path.startsWith(directory))
                     return false;
             }
             return true;
-        } else return mMrl.length() < 7;
+        } else
+            return mMrl.startsWith("http");
+    }
+
+    @Override
+    protected int getLayoutId(){
+        return R.layout.file_picker_fragment;
+    }
+
+    @Override
+    protected int getBrowserFlags() {
+        return MediaBrowser.Flag.Interact|MediaBrowser.Flag.NoSlavesAutodetect;
     }
 }

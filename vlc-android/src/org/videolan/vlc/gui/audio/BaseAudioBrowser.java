@@ -23,7 +23,10 @@
 
 package org.videolan.vlc.gui.audio;
 
+import android.content.Intent;
+import android.graphics.drawable.ColorDrawable;
 import android.support.v7.view.ActionMode;
+import android.support.v7.view.StandaloneActionMode;
 import android.support.v7.widget.RecyclerView;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -31,42 +34,53 @@ import android.view.View;
 
 import org.videolan.medialibrary.media.MediaLibraryItem;
 import org.videolan.medialibrary.media.MediaWrapper;
+import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
 import org.videolan.vlc.gui.ContentActivity;
-import org.videolan.vlc.gui.browser.MediaBrowserFragment;
+import org.videolan.vlc.gui.browser.SortableFragment;
 import org.videolan.vlc.gui.helpers.AudioUtil;
 import org.videolan.vlc.gui.helpers.UiTools;
+import org.videolan.vlc.interfaces.Filterable;
 import org.videolan.vlc.interfaces.IEventsHandler;
-import org.videolan.vlc.media.MediaUtils;
-import org.videolan.vlc.media.PlaylistManager;
+import org.videolan.vlc.util.AdLoader;
 import org.videolan.vlc.util.AndroidDevices;
-import org.videolan.vlc.util.Constants;
-import org.videolan.vlc.viewmodels.audio.AudioModel;
+import org.videolan.vlc.util.MediaLibraryItemComparator;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public abstract class BaseAudioBrowser extends MediaBrowserFragment<AudioModel> implements IEventsHandler {
+public abstract class BaseAudioBrowser extends SortableFragment<AudioBrowserAdapter> implements IEventsHandler, Filterable {
 
+    public View mSearchButtonView;
     public ContentActivity mActivity;
     protected AudioBrowserAdapter[] mAdapters;
-    protected AudioBrowserAdapter mAdapter;
-
-    public AudioBrowserAdapter getCurrentAdapter() {
-        return mAdapter;
-    }
 
     protected void inflate(Menu menu, int position) {
-        if (getActivity() == null) return;
+        if (getActivity() == null)
+            return;
         getActivity().getMenuInflater().inflate(R.menu.audio_list_browser, menu);
+    }
+
+    @Override
+    public void onPrepareOptionsMenu(Menu menu) {
+        super.onPrepareOptionsMenu(menu);
+        AudioBrowserAdapter adapter = getCurrentAdapter();
+        menu.findItem(R.id.ml_menu_last_playlist).setVisible(true);
+        menu.findItem(R.id.ml_menu_sortby_name).setVisible(adapter.isSortAllowed(MediaLibraryItemComparator.SORT_BY_TITLE));
+        menu.findItem(R.id.ml_menu_sortby_artist_name).setVisible(adapter.isSortAllowed(MediaLibraryItemComparator.SORT_BY_ARTIST));
+        menu.findItem(R.id.ml_menu_sortby_album_name).setVisible(adapter.isSortAllowed(MediaLibraryItemComparator.SORT_BY_ALBUM));
+        menu.findItem(R.id.ml_menu_sortby_length).setVisible(adapter.isSortAllowed(MediaLibraryItemComparator.SORT_BY_LENGTH));
+        menu.findItem(R.id.ml_menu_sortby_date).setVisible(adapter.isSortAllowed(MediaLibraryItemComparator.SORT_BY_DATE));
+        menu.findItem(R.id.ml_menu_sortby_number).setVisible(adapter.isSortAllowed(MediaLibraryItemComparator.SORT_BY_NUMBER));
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
             case R.id.ml_menu_last_playlist:
-                MediaUtils.loadlastPlaylist(getActivity(), Constants.PLAYLIST_TYPE_AUDIO);
+                getActivity().sendBroadcast(new Intent(PlaybackService.ACTION_REMOTE_LAST_PLAYLIST));
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
@@ -83,33 +97,50 @@ public abstract class BaseAudioBrowser extends MediaBrowserFragment<AudioModel> 
 
     @Override
     public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-        final List<MediaLibraryItem> selection = getCurrentAdapter().getSelection();
-        final int count = selection.size();
+        int count = getCurrentAdapter().getSelectionCount();
         if (count == 0) {
             stopActionMode();
             return false;
         }
-        boolean isSong = count == 1 && selection.get(0).getItemType() == MediaLibraryItem.TYPE_MEDIA;
-        menu.findItem(R.id.action_mode_audio_set_song).setVisible(isSong && AndroidDevices.isPhone);
+        setActionModeBackgroundColor(mode, config.getColorPrimary());
+
+        boolean isSong = count == 1 && getCurrentAdapter().getSelection().get(0).getItemType() == MediaLibraryItem.TYPE_MEDIA;
+        menu.findItem(R.id.action_mode_audio_set_song).setVisible(isSong && AndroidDevices.isPhone());
         menu.findItem(R.id.action_mode_audio_info).setVisible(count == 1);
-        menu.findItem(R.id.action_mode_audio_append).setVisible(PlaylistManager.Companion.hasMedia());
+        menu.findItem(R.id.action_mode_audio_append).setVisible(mService.hasMedia());
         return true;
+    }
+
+    public static void setActionModeBackgroundColor(ActionMode actionMode, int color) {
+        try {
+            StandaloneActionMode standaloneActionMode = (StandaloneActionMode) actionMode;
+            Field mContextView = StandaloneActionMode.class.getDeclaredField("mContextView");
+            mContextView.setAccessible(true);
+            Object value = mContextView.get(standaloneActionMode);
+            ((View) value).setBackground(new ColorDrawable(color));
+        } catch (Throwable ignore) {
+        }
     }
 
     @Override
     public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
-        final List<MediaLibraryItem> list = getCurrentAdapter().getSelection();
+        List<MediaLibraryItem> list = getCurrentAdapter().getSelection();
         stopActionMode();
         if (!list.isEmpty()) {
-            final List<MediaWrapper> tracks = new ArrayList<>();
+            final ArrayList<MediaWrapper> tracks = new ArrayList<>();
             for (MediaLibraryItem mediaItem : list)
                 tracks.addAll(Arrays.asList(mediaItem.getTracks()));
             switch (item.getItemId()) {
                 case R.id.action_mode_audio_play:
-                    MediaUtils.openList(getActivity(), tracks, 0);
+                    AdLoader.loadFullscreenBanner(getActivity(), new AdLoader.ContentPlayAllowedListener() {
+                        @Override
+                        public void onPlayAllowed() {
+                    mService.load(tracks, 0);
+                        }
+                    });
                     break;
                 case R.id.action_mode_audio_append:
-                    MediaUtils.appendMedia(getActivity(), tracks);
+                    mService.append(tracks);
                     break;
                 case R.id.action_mode_audio_add_playlist:
                     UiTools.addToPlaylist(getActivity(), tracks);
@@ -132,9 +163,8 @@ public abstract class BaseAudioBrowser extends MediaBrowserFragment<AudioModel> 
     }
 
     public void onDestroyActionMode(AudioBrowserAdapter adapter) {
-        setFabPlayVisibility(true);
         mActionMode = null;
-        List<? extends MediaLibraryItem> items = adapter.getAll();
+        ArrayList<? extends MediaLibraryItem> items = adapter.getAll();
         if (items != null) {
             for (int i = 0; i < items.size(); ++i) {
                 if (items.get(i).hasStateFlags(MediaLibraryItem.FLAG_SELECTED)) {
@@ -178,7 +208,36 @@ public abstract class BaseAudioBrowser extends MediaBrowserFragment<AudioModel> 
     public void onCtxClick(View anchor, final int position, final MediaLibraryItem mediaItem) {}
 
     @Override
-    public void onUpdateFinished(RecyclerView.Adapter adapter) {
-        UiTools.updateSortTitles(this);
+    public void onUpdateFinished(RecyclerView.Adapter adapter) {}
+
+    public void restoreList() {
+        getCurrentAdapter().restoreList();
+    }
+
+    @Override
+    public boolean enableSearchOption() {
+        return true;
+    }
+
+    @Override
+    public void setSearchVisibility(boolean visible) {
+        UiTools.setViewVisibility(mSearchButtonView, visible ? View.VISIBLE : View.GONE);
+    }
+
+    @Override
+    public void sortBy(int newSortby) {
+        AudioBrowserAdapter adapter = mAdapters[0];
+        int sortDirection = adapter.getSortDirection();
+        int oldSortby = adapter.getSortBy();
+        int delfaultSortby = getCurrentAdapter().getDefaultSort();
+        int defaultDirection = getCurrentAdapter().getDefaultDirection();
+        if (newSortby == oldSortby)
+            sortDirection*=-1;
+        else if (newSortby == delfaultSortby)
+            sortDirection = defaultDirection*-1;
+        else
+            sortDirection = 1;
+        for (AudioBrowserAdapter audioBrowserAdapter : mAdapters)
+            audioBrowserAdapter.sortBy(newSortby, sortDirection);
     }
 }

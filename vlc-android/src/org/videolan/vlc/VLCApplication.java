@@ -20,14 +20,16 @@
 package org.videolan.vlc;
 
 import android.app.Application;
-import android.arch.lifecycle.Lifecycle;
-import android.arch.lifecycle.ProcessLifecycleOwner;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Process;
 import android.preference.PreferenceManager;
+import android.support.multidex.MultiDex;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.util.SimpleArrayMap;
 import android.util.Log;
@@ -35,62 +37,92 @@ import android.util.Log;
 import org.videolan.libvlc.Dialog;
 import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.medialibrary.Medialibrary;
+import org.videolan.vlc.config.Config;
 import org.videolan.vlc.gui.DialogActivity;
 import org.videolan.vlc.gui.dialogs.VlcProgressDialog;
 import org.videolan.vlc.gui.helpers.AudioUtil;
 import org.videolan.vlc.gui.helpers.BitmapCache;
-import org.videolan.vlc.gui.helpers.NotificationHelper;
 import org.videolan.vlc.util.AndroidDevices;
 import org.videolan.vlc.util.Strings;
-import org.videolan.vlc.util.Util;
 import org.videolan.vlc.util.VLCInstance;
-import org.videolan.vlc.util.WorkersKt;
 
 import java.lang.ref.WeakReference;
 import java.util.Calendar;
 import java.util.Locale;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class VLCApplication extends Application {
     public final static String TAG = "VLC/VLCApplication";
 
     public final static String ACTION_MEDIALIBRARY_READY = "VLC/VLCApplication";
     private static volatile VLCApplication instance;
+    private static volatile Medialibrary sMedialibraryInstance;
 
     public final static String SLEEP_INTENT = Strings.buildPkgString("SleepIntent");
 
     public static Calendar sPlayerSleepTime = null;
+
     private static boolean sTV;
-    private static SharedPreferences sSettings;
+    private static SharedPreferences mSettings;
 
     private static SimpleArrayMap<String, WeakReference<Object>> sDataMap = new SimpleArrayMap<>();
 
+    /* Up to 2 threads maximum, inactive threads are killed after 2 seconds */
+    private final int maxThreads = Math.max(AndroidUtil.isJellyBeanMR1OrLater ? Runtime.getRuntime().availableProcessors() : 2, 1);
+    public static final ThreadFactory THREAD_FACTORY = new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable);
+            thread.setPriority(Process.THREAD_PRIORITY_DEFAULT+Process.THREAD_PRIORITY_LESS_FAVORABLE);
+            return thread;
+        }
+    };
+    private final ThreadPoolExecutor mThreadPool = new ThreadPoolExecutor(Math.min(2, maxThreads), maxThreads, 30, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<Runnable>(), THREAD_FACTORY);
+    private Handler mHandler = new Handler(Looper.getMainLooper());
+
     private static int sDialogCounter = 0;
 
-    public VLCApplication() {
-        super();
-        instance = this;
-    }
+    private Config config;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        sSettings = PreferenceManager.getDefaultSharedPreferences(this);
-        sTV = AndroidDevices.isAndroidTv || (!AndroidDevices.isChromeBook && !AndroidDevices.hasTsp);
-
+        instance = this;
+        mSettings = PreferenceManager.getDefaultSharedPreferences(this);
+        config = new Config(getAppContext());
         setLocale();
 
-        WorkersKt.runBackground(new Runnable() {
+        runBackground(new Runnable() {
             @Override
             public void run() {
-
-                if (AndroidUtil.isOOrLater) NotificationHelper.createNotificationChannels(VLCApplication.this);
                 // Prepare cache folder constants
                 AudioUtil.prepareCacheFolder(instance);
 
-                if (!VLCInstance.testCompatibleCPU(instance)) return;
+                sTV = AndroidDevices.isAndroidTv() || !AndroidDevices.hasTsp();
+
+                if (!VLCInstance.testCompatibleCPU(instance))
+                    return;
                 Dialog.setCallbacks(VLCInstance.get(), mDialogCallbacks);
+
+                // Disable remote control receiver on Fire TV.
+                if (!AndroidDevices.hasTsp())
+                    AndroidDevices.setRemoteControlReceiverEnabled(false);
             }
         });
+    }
+
+    public Config getConfig() {
+        return config;
+    }
+
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        MultiDex.install(this);
     }
 
     @Override
@@ -133,12 +165,26 @@ public class VLCApplication extends Application {
         return instance.getResources();
     }
 
-    public static SharedPreferences getSettings() {
-        return sSettings;
+    public static boolean showTvUi() {
+        return sTV || mSettings.getBoolean("tv_ui", false);
     }
 
-    public static boolean showTvUi() {
-        return sTV || (sSettings != null && sSettings.getBoolean("tv_ui", false));
+    public static void runBackground(Runnable runnable) {
+        if (Looper.myLooper() != Looper.getMainLooper())
+            runnable.run();
+        else
+            instance.mThreadPool.execute(runnable);
+    }
+
+    public static void runOnMainThread(Runnable runnable) {
+        if (Looper.myLooper() == Looper.getMainLooper())
+            runnable.run();
+        else
+            instance.mHandler.post(runnable);
+    }
+
+    public static boolean removeTask(Runnable runnable) {
+        return instance.mThreadPool.remove(runnable);
     }
 
     public static void storeData(String key, Object data) {
@@ -166,33 +212,33 @@ public class VLCApplication extends Application {
 
         @Override
         public void onDisplay(Dialog.LoginDialog dialog) {
-            final String key = DialogActivity.KEY_LOGIN + sDialogCounter++;
+            String key = DialogActivity.KEY_LOGIN + sDialogCounter++;
             fireDialog(dialog, key);
         }
 
         @Override
         public void onDisplay(Dialog.QuestionDialog dialog) {
-            if (!Util.byPassChromecastDialog(dialog)) {
-                final String key = DialogActivity.KEY_QUESTION + sDialogCounter++;
-                fireDialog(dialog, key);
-            }
+            String key = DialogActivity.KEY_QUESTION + sDialogCounter++;
+            fireDialog(dialog, key);
         }
 
         @Override
         public void onDisplay(Dialog.ProgressDialog dialog) {
-            final String key = DialogActivity.KEY_PROGRESS + sDialogCounter++;
+            String key = DialogActivity.KEY_PROGRESS + sDialogCounter++;
             fireDialog(dialog, key);
         }
 
         @Override
         public void onCanceled(Dialog dialog) {
-            if (dialog != null && dialog.getContext() != null) ((DialogFragment)dialog.getContext()).dismiss();
+            if (dialog != null && dialog.getContext() != null)
+                ((DialogFragment)dialog.getContext()).dismiss();
         }
 
         @Override
         public void onProgressUpdate(Dialog.ProgressDialog dialog) {
             VlcProgressDialog vlcProgressDialog = (VlcProgressDialog) dialog.getContext();
-            if (vlcProgressDialog != null && vlcProgressDialog.isVisible()) vlcProgressDialog.updateProgress();
+            if (vlcProgressDialog != null && vlcProgressDialog.isVisible())
+                vlcProgressDialog.updateProgress();
         }
     };
 
@@ -203,17 +249,19 @@ public class VLCApplication extends Application {
     }
 
     public static Medialibrary getMLInstance() {
-        return Medialibrary.getInstance();
+        if (sMedialibraryInstance == null) {
+            sMedialibraryInstance = Medialibrary.getInstance();
+        }
+        return sMedialibraryInstance;
     }
 
-    public static void setLocale() {
-        if (sSettings == null) PreferenceManager.getDefaultSharedPreferences(instance);
+    public static void setLocale(){
         // Are we using advanced debugging - locale?
-        String p = sSettings.getString("set_locale", "");
+        String p = mSettings.getString("set_locale", "");
         if (!p.equals("")) {
             Locale locale;
             // workaround due to region code
-            if (p.equals("zh-TW")) {
+            if(p.equals("zh-TW")) {
                 locale = Locale.TRADITIONAL_CHINESE;
             } else if(p.startsWith("zh")) {
                 locale = Locale.CHINA;
@@ -237,13 +285,5 @@ public class VLCApplication extends Application {
             getAppResources().updateConfiguration(config,
                     getAppResources().getDisplayMetrics());
         }
-    }
-
-    /**
-     * Check if application is currently displayed
-     * @return true if an activity is displayed, false if app is in background.
-     */
-    public static boolean isForeground() {
-        return ProcessLifecycleOwner.get().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED);
     }
 }

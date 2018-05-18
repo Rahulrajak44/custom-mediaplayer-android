@@ -20,7 +20,11 @@
 
 package org.videolan.vlc.media;
 
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
+
 import org.videolan.medialibrary.media.MediaWrapper;
+import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.gui.helpers.BitmapUtil;
 
 import java.util.ArrayList;
@@ -30,9 +34,9 @@ public class MediaGroup extends MediaWrapper {
 
     public final static String TAG = "VLC/MediaGroup";
 
-    private List<MediaWrapper> mMedias;
+    private ArrayList<MediaWrapper> mMedias;
 
-    private MediaGroup(MediaWrapper media) {
+    public MediaGroup(MediaWrapper media) {
         super(media.getUri(),
                 media.getTime(),
                 media.getLength(),
@@ -71,7 +75,7 @@ public class MediaGroup extends MediaWrapper {
         return mMedias.get(0);
     }
 
-    public List<MediaWrapper> getAll() {
+    public ArrayList<MediaWrapper> getAll() {
         return mMedias;
     }
 
@@ -79,39 +83,45 @@ public class MediaGroup extends MediaWrapper {
         return mMedias.size();
     }
 
-    private void merge(MediaWrapper media, String title) {
+    public void merge(MediaWrapper media, String title) {
         mMedias.add(media);
         this.mTitle = title;
     }
 
-    public static List<MediaGroup> group(MediaWrapper[] mediaList, int minGroupLengthValue) {
-        final ArrayList<MediaGroup> groups = new ArrayList<>();
-        for (MediaWrapper media : mediaList) if (media != null) insertInto(groups, media, minGroupLengthValue);
+    public static List<MediaGroup> group(MediaWrapper[] mediaList) {
+        ArrayList<MediaGroup> groups = new ArrayList<>();
+        for (MediaWrapper media : mediaList)
+            if (media != null)
+                insertInto(groups, media);
         return groups;
     }
 
-    public static List<MediaGroup> group(List<MediaWrapper> mediaList, int minGroupLengthValue) {
-        final ArrayList<MediaGroup> groups = new ArrayList<>();
-        for (MediaWrapper media : mediaList) if (media != null) insertInto(groups, media, minGroupLengthValue);
+    public static List<MediaGroup> group(List<MediaWrapper> mediaList) {
+        ArrayList<MediaGroup> groups = new ArrayList<>();
+        for (MediaWrapper media : mediaList)
+            if (media != null)
+                insertInto(groups, media);
         return groups;
     }
 
-    private static void insertInto(ArrayList<MediaGroup> groups, MediaWrapper media, int minGroupLengthValue) {
+    private static void insertInto(ArrayList<MediaGroup> groups, MediaWrapper media) {
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(VLCApplication.getAppContext());
+        int minGroupLengthValue = Integer.valueOf(preferences.getString("video_min_group_length", "6"));
         for (MediaGroup mediaGroup : groups) {
-            final String group = mediaGroup.getTitle().toLowerCase();
-            String title = media.getTitle().toLowerCase();
+            String group = mediaGroup.getTitle();
+            String title = media.getTitle();
 
             //Handle titles starting with "The"
-            int groupOffset = group.startsWith("the") ? 4 : 0;
-            if (title.startsWith("the"))
+            int groupOffset = group.toLowerCase().startsWith("the") ? 4 : 0;
+            if (title.toLowerCase().startsWith("the"))
                 title = title.substring(4);
 
             // find common prefix
             int commonLength = 0;
-            final String groupTitle = group.substring(groupOffset);
-            final int minLength = Math.min(groupTitle.length(), title.length());
+            String groupTitle = group.substring(groupOffset);
+            int minLength = Math.min(groupTitle.length(), title.length());
             while (commonLength < minLength
-                    && groupTitle.charAt(commonLength) == title.charAt(commonLength))
+                    && groupTitle.toLowerCase().charAt(commonLength) == title.toLowerCase().charAt(commonLength))
                 ++commonLength;
 
             if (commonLength >= minGroupLengthValue && minGroupLengthValue != 0) {
@@ -120,7 +130,7 @@ public class MediaGroup extends MediaWrapper {
                     mediaGroup.add(media);
                 } else {
                     // not the same prefix, but close : merge
-                    mediaGroup.merge(media, mediaGroup.getTitle().substring(0, commonLength+groupOffset));
+                    mediaGroup.merge(media, group.substring(0, commonLength+groupOffset));
                 }
                 return;
             }

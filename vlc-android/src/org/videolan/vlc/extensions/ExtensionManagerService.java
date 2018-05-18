@@ -28,8 +28,11 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -37,25 +40,36 @@ import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Log;
 
+import org.videolan.medialibrary.media.MediaWrapper;
 import org.videolan.vlc.extensions.api.IExtensionHost;
 import org.videolan.vlc.extensions.api.IExtensionService;
 import org.videolan.vlc.extensions.api.VLCExtensionItem;
 import org.videolan.vlc.media.MediaUtils;
-import org.videolan.medialibrary.media.MediaWrapper;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class ExtensionManagerService extends Service {
 
     private static final String TAG = "VLC/ExtensionManagerService";
 
+    private static final String KEY_PROTOCOL_VERSION = "protocolVersion";
+    private static final String KEY_LISTING_TITLE = "title";
+    private static final String KEY_DESCRIPTION = "description";
+    private static final String KEY_MENU_ICON = "menuicon";
+    private static final String KEY_SETTINGS_ACTIVITY = "settingsActivity";
+
+    public static final String ACTION_EXTENSION = "org.videolan.vlc.Extension";
+    public static final int PROTOCOLE_VERSION = 1;
+
     private final IBinder mBinder = new LocalBinder();
     private ExtensionManagerActivity mExtensionManagerActivity;
 
+    private List<ExtensionListing> mExtensions = new ArrayList<>();
     int mCurrentIndex = -1;
 
     public interface ExtensionManagerActivity {
-        void displayExtensionItems(int extensionId, String title, List<VLCExtensionItem> items, boolean showParams, boolean isRefresh);
+        void displayExtensionItems(String title, List<VLCExtensionItem> items, boolean showParams, boolean isRefresh);
     }
 
     public void setExtensionManagerActivity(ExtensionManagerActivity activity) {
@@ -91,20 +105,55 @@ public class ExtensionManagerService extends Service {
         }
     }
 
+    public List<ExtensionListing> updateAvailableExtensions() {
+        PackageManager pm = getApplicationContext().getPackageManager();
+        List<ResolveInfo> resolveInfos = pm.queryIntentServices(
+                new Intent(ACTION_EXTENSION), PackageManager.GET_META_DATA);
+
+        ArrayList<ExtensionListing> extensions = new ArrayList<>();
+
+        for (ResolveInfo resolveInfo : resolveInfos) {
+            ExtensionListing extension = new ExtensionListing();
+            extension.componentName(new ComponentName(resolveInfo.serviceInfo.packageName,
+                    resolveInfo.serviceInfo.name));
+            Bundle metaData = resolveInfo.serviceInfo.metaData;
+            if (metaData != null) {
+                extension.compatible(metaData.getInt(KEY_PROTOCOL_VERSION) == PROTOCOLE_VERSION);
+                if (!extension.compatible())
+                    continue;
+                String title = metaData.getString(KEY_LISTING_TITLE);
+                extension.title(title != null ? title : resolveInfo.loadLabel(pm).toString());
+                extension.description(metaData.getString(KEY_DESCRIPTION));
+                String settingsActivity = metaData.getString(KEY_SETTINGS_ACTIVITY);
+                if (!TextUtils.isEmpty(settingsActivity)) {
+                    extension.settingsActivity(ComponentName.unflattenFromString(
+                            resolveInfo.serviceInfo.packageName + "/" + settingsActivity));
+                }
+                extension.menuIcon(metaData.getInt(KEY_MENU_ICON, 0));
+                extensions.add(extension);
+            }
+        }
+        synchronized (mExtensions) {
+            mExtensions.clear();
+            mExtensions.addAll(extensions);
+        }
+        return extensions;
+    }
+
     public void openExtension(int index) {
         if (index == mCurrentIndex)
-            browse(null);
+            browse(0, null);
         else
             connectService(index);
 
     }
 
     public ExtensionListing getCurrentExtension() {
-        return getExtensions().get(mCurrentIndex);
+        return mExtensions.get(mCurrentIndex);
     }
 
     public void connectService(final int index) {
-        ExtensionListing info = getExtensions().get(index);
+        ExtensionListing info = mExtensions.get(index);
 
         if (mCurrentIndex != -1) {
             disconnect();
@@ -150,7 +199,7 @@ public class ExtensionManagerService extends Service {
 
     public void refresh() {
         try {
-            ExtensionListing extension = getExtensions().get(mCurrentIndex);
+            ExtensionListing extension = mExtensions.get(mCurrentIndex);
             if (extension == null)
                 return;
             IExtensionService service = extension.getConnection().binder;
@@ -160,15 +209,15 @@ public class ExtensionManagerService extends Service {
         } catch (RemoteException e) {}
     }
 
-    public void browse(String stringId) {
+    public void browse(int intId, String stringId) {
         try {
-            ExtensionListing extension = getExtensions().get(mCurrentIndex);
+            ExtensionListing extension = mExtensions.get(mCurrentIndex);
             if (extension == null)
                 return;
             IExtensionService service = extension.getConnection().binder;
             if (service == null)
                 return;
-            service.browse(stringId);
+            service.browse(intId, stringId);
         } catch (RemoteException e) {}
     }
 
@@ -194,7 +243,7 @@ public class ExtensionManagerService extends Service {
                     @Override
                     public void run() {
                         if (mExtensionManagerActivity != null)
-                            mExtensionManagerActivity.displayExtensionItems(mCurrentIndex, title, items, showParams, isRefresh);
+                            mExtensionManagerActivity.displayExtensionItems(title, items, showParams, isRefresh);
                     }
                 });
             }
@@ -235,8 +284,4 @@ public class ExtensionManagerService extends Service {
     }
 
     private final Handler mHandler = new Handler();
-
-    public List<ExtensionListing> getExtensions() {
-        return ExtensionsManager.getInstance().getExtensions(getApplication(), false);
-    }
 }

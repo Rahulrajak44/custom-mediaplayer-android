@@ -21,17 +21,19 @@
 package org.videolan.vlc.gui.preferences;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
+import android.os.Build;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
-import android.support.design.widget.AppBarLayout;
-import android.support.v4.view.ViewCompat;
+import android.support.v4.widget.NestedScrollView;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.MenuItem;
+import android.view.Window;
+import android.view.WindowManager;
 
 import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
+import org.videolan.vlc.VLCApplication;
+import org.videolan.vlc.config.Config;
 
 @SuppressWarnings("deprecation")
 public class PreferencesActivity extends AppCompatActivity implements PlaybackService.Client.Callback {
@@ -48,18 +50,17 @@ public class PreferencesActivity extends AppCompatActivity implements PlaybackSe
     public final static String VIDEO_RATIO = "video_ratio";
     public final static String AUTO_RESCAN = "auto_rescan";
     public final static String LOGIN_STORE = "store_login";
-    public static final String KEY_PLAYBACK_RATE = "playback_rate";
-    public static final String KEY_PLAYBACK_SPEED_PERSIST = "playback_speed";
+    public static final String KEY_AUDIO_PLAYBACK_RATE = "playback_rate";
+    public static final String KEY_AUDIO_PLAYBACK_SPEED_PERSIST = "playback_speed";
     public final static String KEY_VIDEO_APP_SWITCH = "video_action_switch";
     public final static int RESULT_RESCAN = RESULT_FIRST_USER + 1;
     public final static int RESULT_RESTART = RESULT_FIRST_USER + 2;
     public final static int RESULT_RESTART_APP = RESULT_FIRST_USER + 3;
     public final static int RESULT_UPDATE_SEEN_MEDIA = RESULT_FIRST_USER + 4;
-    public final static int RESULT_UPDATE_ARTISTS = RESULT_FIRST_USER + 5;
 
     private PlaybackService.Client mClient = new PlaybackService.Client(this, this);
     private PlaybackService mService;
-    private AppBarLayout mAppBarLayout;
+    private NestedScrollView nestedScrollView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,23 +70,19 @@ public class PreferencesActivity extends AppCompatActivity implements PlaybackSe
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.preferences_activity);
-        setSupportActionBar((Toolbar) findViewById(R.id.main_toolbar));
+        Toolbar toolbar = (Toolbar) findViewById(R.id.main_toolbar);
+        setSupportActionBar(toolbar);
+        toolbar.setBackgroundColor(((VLCApplication)getApplication()).getConfig().getColorPrimary());
         if (savedInstanceState == null) {
             getSupportFragmentManager().beginTransaction()
                     .replace(R.id.fragment_placeholder, new PreferencesFragment())
                     .commit();
         }
-        mAppBarLayout = findViewById(R.id.appbar);
-        mAppBarLayout.post(new Runnable() {
-            @Override
-            public void run() {
-                ViewCompat.setElevation(mAppBarLayout, getResources().getDimensionPixelSize(R.dimen.default_appbar_elevation));
-            }
-        });
+        nestedScrollView = (NestedScrollView) findViewById(R.id.nestedscrollview);
     }
 
-    void expandBar() {
-        mAppBarLayout.setExpanded(true);
+    void scrollUp() {
+        nestedScrollView.scrollTo(0,0);
     }
 
     @Override
@@ -111,11 +108,13 @@ public class PreferencesActivity extends AppCompatActivity implements PlaybackSe
     }
 
     private void applyTheme() {
-        SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(this);
-        boolean enableBlackTheme = pref.getBoolean("enable_black_theme", false);
-        if (enableBlackTheme) {
-            setTheme(R.style.Theme_VLC_Black);
-        }
+        Config config = ((VLCApplication)getApplication()).getConfig();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            Window window = getWindow();
+            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            window.setStatusBarColor(config.getColorPrimaryDark());
+        };
     }
 
     @Override
@@ -129,7 +128,8 @@ public class PreferencesActivity extends AppCompatActivity implements PlaybackSe
     }
 
     public void restartMediaPlayer(){
-        if (mService != null) mService.restartMediaPlayer();
+        if (mService != null)
+            mService.restartMediaPlayer();
     }
 
     public void exitAndRescan(){
@@ -145,10 +145,6 @@ public class PreferencesActivity extends AppCompatActivity implements PlaybackSe
 
     public void setRestartApp(){
         setResult(RESULT_RESTART_APP);
-    }
-
-    public void updateArtists(){
-        setResult(RESULT_UPDATE_ARTISTS);
     }
 
     public void detectHeadset(boolean detect){

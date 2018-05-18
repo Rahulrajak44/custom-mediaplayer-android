@@ -2,27 +2,20 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     android:title="@string/preferences">
 
-    <PreferenceCategory android:title="@string/medialibrary" >
+    <org.videolan.vlc.gui.preferences.CustomPreferenceCategory android:title="@string/medialibrary" >
         <PreferenceScreen
             android:key="directories"
             android:summary="@string/directories_summary"
             android:title="@string/medialibrary_directories" />
 
-        <CheckBoxPreference
+        <org.videolan.vlc.gui.preferences.CustomCheckBoxPreference
             android:defaultValue="true"
             android:key="auto_rescan"
             android:summary="@string/auto_rescan_summary"
             android:title="@string/auto_rescan" />
-    </PreferenceCategory>
+    </org.videolan.vlc.gui.preferences.CustomPreferenceCategory>
 
-    <PreferenceCategory android:title="@string/video_prefs_category" >
-        <ListPreference
-            android:key="video_action_switch"
-            android:defaultValue="0"
-            android:entries="@array/video_app_switch_action_titles"
-            android:entryValues="@array/video_app_switch_action_values"
-            android:summary="@string/video_app_switch_summary"
-            android:title="@string/video_app_switch_title" />
+    <org.videolan.vlc.gui.preferences.CustomPreferenceCategory android:title="@string/video_prefs_category" android:key="video">
         <ListPreference
             android:defaultValue="-1"
             android:entries="@array/hardware_acceleration_list"
@@ -30,23 +23,24 @@
             android:key="hardware_acceleration"
             android:summary="@string/hardware_acceleration_summary"
             android:title="@string/hardware_acceleration" />
+
         <ListPreference
             android:defaultValue="99"
             android:entries="@array/screen_orientation_list"
             android:entryValues="@array/screen_orientation_values"
             android:key="screen_orientation"
             android:title="@string/screen_orientation" />
-    </PreferenceCategory>
+    </org.videolan.vlc.gui.preferences.CustomPreferenceCategory>
 
-    <PreferenceCategory android:title="@string/history" >
-        <CheckBoxPreference
+    <org.videolan.vlc.gui.preferences.CustomPreferenceCategory android:title="@string/history" >
+        <org.videolan.vlc.gui.preferences.CustomCheckBoxPreference
             android:defaultValue="true"
             android:key="playback_history"
             android:summary="@string/playback_history_summary"
             android:title="@string/playback_history_title" />
-    </PreferenceCategory>
+    </org.videolan.vlc.gui.preferences.CustomPreferenceCategory>
 
-    <PreferenceCategory android:title="@string/extra_prefs_category" >
+    <org.videolan.vlc.gui.preferences.CustomPreferenceCategory android:title="@string/extra_prefs_category" >
         <Preference
             android:title="@string/interface_prefs_screen"
             android:key="ui_category" />
@@ -60,15 +54,9 @@
             android:title="@string/audio_prefs_category"
             android:key="audio_category" />
         <Preference
-            android:title="@string/casting_category"
-            android:key="casting_category" />
-        <Preference
-            android:title="@string/extensions_prefs_category"
-            android:key="extensions_category" />
-        <Preference
             android:title="@string/advanced_prefs_category"
             android:key="adv_category" />
 
-    </PreferenceCategory>
+    </org.videolan.vlc.gui.preferences.CustomPreferenceCategory>
 
 </PreferenceScreen>

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<org.videolan.vlc.gui.view.HackyDrawerLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:nextFocusLeft="@+id/ml_menu_search"
+    android:nextFocusRight="@+id/ml_menu_search"
+    android:nextFocusUp="@+id/ml_menu_search"
+    android:nextFocusDown="@+id/ml_menu_search"
+    android:nextFocusForward="@+id/ml_menu_search"
+    android:fitsSystemWindows="true" >
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <android.support.design.widget.CoordinatorLayout
+            android:id="@+id/coordinator"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_above="@+id/adView">
+
+            <include layout="@layout/toolbar"/>
+
+            <FrameLayout
+                android:id="@+id/fragment_placeholder"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:layout_behavior="@string/appbar_scrolling_view_behavior" >
+
+                <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    xmlns:app="http://schemas.android.com/apk/res-auto"
+                    android:id="@+id/root"
+                    android:gravity="center">
+
+                    <android.support.design.widget.CoordinatorLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_below="@+id/appbar"
+                        >
+
+                        <android.support.v7.widget.RecyclerView
+                            app:layout_behavior="@string/appbar_scrolling_view_behavior"
+                            android:overScrollMode="never"
+                            android:padding="8dp"
+                            android:clipToPadding="false"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:id="@+id/channel_grid">
+
+                        </android.support.v7.widget.RecyclerView>
+                    </android.support.design.widget.CoordinatorLayout>
+
+                </RelativeLayout>
+            </FrameLayout>
+
+
+
+
+            <android.support.v7.widget.ViewStubCompat
+                android:id="@+id/scan_viewstub"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/progress_layout_height"
+                android:layout_gravity="bottom"
+                android:layout="@layout/scan_progress"/>
+
+            <include layout="@layout/audioplayercontainer"/>
+        </android.support.design.widget.CoordinatorLayout>
+
+        <com.appsgeyser.sdk.ads.AdView
+            android:id="@+id/adView"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_alignParentBottom="true" />
+    </RelativeLayout>
+
+
+
+
+    <android.support.v7.widget.ViewStubCompat
+        android:id="@+id/audio_playlist_tips"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout="@layout/audio_playlist_tips"/>
+
+    <android.support.v7.widget.ViewStubCompat
+        android:id="@+id/audio_player_tips"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout="@layout/audio_player_tips"/>
+
+</org.videolan.vlc.gui.view.HackyDrawerLayout>

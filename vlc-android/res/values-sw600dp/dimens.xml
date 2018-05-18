@@ -10,12 +10,5 @@
     <dimen name="overlay_margin">10dp</dimen>
 
     <dimen name="file_picker_width">600dip</dimen>
-    <dimen name="audio_player_cover_margin">32dp</dimen>
-
-    <!-- pop-Up player -->
-    <dimen name="video_pip_width">512dp</dimen>
-    <dimen name="video_pip_heigth">288dp</dimen>
-
-    <dimen name="dialog_sd_wisard_width">448dp</dimen>
-    <dimen name="dialog_sd_wisard_height">576dp</dimen>
+    <dimen name="audio_player_cover_margin">60dp</dimen>
 </resources>

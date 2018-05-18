@@ -4,11 +4,12 @@ import com.android.builder.core.DefaultManifestParser
 
 android {
     compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
 
     sourceSets {
     main {
         jni.srcDirs = [] // Prevent gradle from building native code with ndk; we have our own Makefile for it.
-        jniLibs.srcDirs = [ 'jni/libs', 'jni/loader/libs', 'private_libs/libs' ] // Where generated .so files are placed.
+        jniLibs.srcDirs = [ 'jni/libs', 'private_libs/libs' ] // Where generated .so files are placed.
         manifest.srcFile 'AndroidManifest.xml'
         java.srcDirs = ['src']
         resources.srcDirs = ['src']
@@ -31,10 +32,14 @@ android {
         def manifestParser = new DefaultManifestParser(android.sourceSets.main.manifest.srcFile)
         // get the version code of each flavor
         def vlcVersion = manifestParser.getVersionName()
+        manifestParser = new DefaultManifestParser(file('../vlc-android/AndroidManifest.xml'))
+        def androidVersion = manifestParser.getVersionName()
         //Custom APK name
-        variant.outputs.all { output ->
-            if (outputFileName != null && outputFileName.endsWith('.aar')) {
-                outputFileName = "libvlc-${vlcVersion}.aar"
+        variant.outputs.each { output ->
+            def outputFile = output.outputFile
+            if (outputFile != null && outputFile.name.endsWith('.aar')) {
+                def fileName = "libvlc-${vlcVersion}-${androidVersion}.aar"
+                output.outputFile = new File(outputFile.parent, fileName)
             }
         }
     }
@@ -99,6 +104,5 @@ clean {
 }
 
 dependencies {
-    api "com.android.support:support-annotations:$rootProject.ext.appCompatVersion"
-    api "com.android.support:support-v4:$rootProject.ext.appCompatVersion"
+    compile "com.android.support:support-annotations:$rootProject.ext.appCompatVersion"
 }

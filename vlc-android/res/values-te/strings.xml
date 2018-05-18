@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <resources>
-    <!--Main VLC Interface-->
+    <!--Main %1$s Interface-->
     <string name="filebrowser_title">ప్రదర్శించుటకు మాధ్యమాన్ని ఎంచుకోండి</string>
     <string name="sortby">క్రమబద్ధీకరణ...</string>
     <string name="sortby_name">పేరు</string>
@@ -17,7 +17,6 @@
     <string name="pause">నిలిపివేయి</string>
     <string name="not_show_again">ఈ సందేశాన్ని మరలా చూపించవద్దు.</string>
     <string name="beta_warning">ఇది బీటా సంస్కరణ.\n\nఈ సంస్కరణ స్థిరమైనది కాదు.\n\nదీని గురించి మీకు సరిగా తెలియకపోతే, దయచేసి వాడవద్దు.\n\nఇది మీ వ్యవస్థను నాశనం చెయ్యవచ్చు.\nదీనిని మీ స్వంత రిస్కుతో వాడండి.\n\nపండగ చేసుకోండి! :)</string>
-    <string name="info_title">వియల్సీ బీటా</string>
     <string name="unknown_artist">తెలియని కళాకారుడు</string>
     <string name="unknown_album">తెలియని ఆల్బమ్</string>
     <string name="unknown_genre">తెలియని సాహిత్యం</string>

@@ -1,7 +1,7 @@
 /*****************************************************************************
  * MainActivity.java
  *****************************************************************************
- * Copyright © 2011-2018 VLC authors and VideoLAN
+ * Copyright © 2011-2014 VLC authors and VideoLAN
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,24 +25,40 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.database.Cursor;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.design.internal.NavigationMenuView;
 import android.support.design.widget.NavigationView;
 import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentTransaction;
+import android.support.v4.util.SimpleArrayMap;
 import android.support.v4.view.GravityCompat;
+import android.support.v4.view.MenuItemCompat;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.view.ActionMode;
 import android.text.TextUtils;
 import android.view.KeyEvent;
+import android.view.Menu;
 import android.view.MenuItem;
+import android.view.SubMenu;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FilterQueryProvider;
 
-import org.videolan.libvlc.util.AndroidUtil;
+import com.appsgeyser.sdk.ads.AdView;
+
 import org.videolan.medialibrary.Medialibrary;
 import org.videolan.vlc.BuildConfig;
 import org.videolan.vlc.MediaParsingService;
@@ -51,89 +67,185 @@ import org.videolan.vlc.StartActivity;
 import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.extensions.ExtensionListing;
 import org.videolan.vlc.extensions.ExtensionManagerService;
-import org.videolan.vlc.extensions.ExtensionsManager;
 import org.videolan.vlc.extensions.api.VLCExtensionItem;
 import org.videolan.vlc.gui.audio.AudioBrowserFragment;
 import org.videolan.vlc.gui.browser.BaseBrowserFragment;
 import org.videolan.vlc.gui.browser.ExtensionBrowser;
-import org.videolan.vlc.gui.helpers.Navigator;
+import org.videolan.vlc.gui.browser.FileBrowserFragment;
+import org.videolan.vlc.gui.browser.MediaBrowserFragment;
 import org.videolan.vlc.gui.helpers.UiTools;
+import org.videolan.vlc.gui.home.HomeFragment;
+import org.videolan.vlc.gui.network.MRLPanelFragment;
 import org.videolan.vlc.gui.preferences.PreferencesActivity;
 import org.videolan.vlc.gui.preferences.PreferencesFragment;
 import org.videolan.vlc.gui.video.VideoGridFragment;
 import org.videolan.vlc.gui.view.HackyDrawerLayout;
+import org.videolan.vlc.interfaces.Filterable;
 import org.videolan.vlc.interfaces.IRefreshable;
 import org.videolan.vlc.media.MediaUtils;
-import org.videolan.vlc.util.Constants;
 import org.videolan.vlc.util.Permissions;
-import org.videolan.vlc.util.Util;
+import org.videolan.vlc.util.VLCInstance;
 
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends ContentActivity implements FilterQueryProvider, ExtensionManagerService.ExtensionManagerActivity {
+public class MainActivity extends ContentActivity implements FilterQueryProvider, NavigationView.OnNavigationItemSelectedListener, ExtensionManagerService.ExtensionManagerActivity {
     public final static String TAG = "VLC/MainActivity";
 
+    private static final int ACTIVITY_RESULT_PREFERENCES = 1;
+    private static final int ACTIVITY_RESULT_OPEN = 2;
+    public static final int ACTIVITY_RESULT_SECONDARY = 3;
+
+
     private Medialibrary mMediaLibrary;
-    private ExtensionsManager mExtensionsManager;
     private HackyDrawerLayout mDrawerLayout;
     private NavigationView mNavigationView;
     private ActionBarDrawerToggle mDrawerToggle;
-    private Navigator mNavigator;
+
+    private int mCurrentFragmentId;
+    public Fragment mCurrentFragment = null;
+    private final SimpleArrayMap<String, WeakReference<Fragment>> mFragmentsStack = new SimpleArrayMap<>();
 
     private boolean mScanNeeded = false;
+
+    private boolean mFirstRun, mUpgrade;
 
     // Extensions management
     private ServiceConnection mExtensionServiceConnection;
     private ExtensionManagerService mExtensionManagerService;
+    private static final int PLUGIN_NAVIGATION_GROUP = 2;
+
+    private AdView adView;
+
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Util.checkCpuCompatibility(this);
+
+        if (!VLCInstance.testCompatibleCPU(this)) {
+            finish();
+            return;
+        }
+
         Permissions.checkReadStoragePermission(this, false);
+
         /*** Start initializing the UI ***/
+
         setContentView(R.layout.main);
-        mDrawerLayout = findViewById(R.id.root_container);
+
+        adView = (AdView) findViewById(R.id.adView);
+
+        mDrawerLayout = (HackyDrawerLayout) findViewById(R.id.root_container);
         setupNavigationView();
+
         initAudioPlayerContainerActivity();
-        mNavigator = new Navigator(this, mSettings, mExtensionManagerService, savedInstanceState);
-        if (savedInstanceState == null) {
-            if (getIntent().getBooleanExtra(Constants.EXTRA_UPGRADE, false)) {
-            /*
-             * The sliding menu is automatically opened when the user closes
-             * the info dialog. If (for any reason) the dialog is not shown,
-             * open the menu after a short delay.
-             */
-            mActivityHandler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        mDrawerLayout.openDrawer(mNavigationView);
-                    }
-                }, 500);
+
+        if (savedInstanceState != null) {
+            //Restore fragments stack
+            for (Fragment fragment : getSupportFragmentManager().getFragments())
+                if (fragment != null)
+                    mFragmentsStack.put(fragment.getTag(), new WeakReference<>(fragment));
+
+            mCurrentFragmentId = savedInstanceState.getInt("current");
+            if (mCurrentFragmentId > 0) {
+                mNavigationView.setCheckedItem(mCurrentFragmentId);
+                String tag = getTag(mCurrentFragmentId);
+                if (mFragmentsStack.containsKey(tag))
+                    mCurrentFragment = mFragmentsStack.get(tag).get();
             }
-            mNavigator.reloadPreferences();
         }
 
         /* Set up the action bar */
         prepareActionBar();
 
-        mDrawerToggle = new ActionBarDrawerToggle(this, mDrawerLayout, R.string.drawer_open, R.string.drawer_close);
-        mDrawerLayout.addDrawerListener(mDrawerToggle);
+        /* Set up the sidebar click listener
+         * no need to invalidate menu for now */
+        mDrawerToggle = new ActionBarDrawerToggle(this, mDrawerLayout, R.string.drawer_open, R.string.drawer_close) {
+            @Override
+            public void onDrawerClosed(View drawerView) {
+                super.onDrawerClosed(drawerView);
+                if (getCurrentFragment() instanceof MediaBrowserFragment)
+                    ((MediaBrowserFragment) getCurrentFragment()).setReadyToDisplay(true);
+            }
+
+            // Hack to make navigation drawer browsable with DPAD.
+            // see https://code.google.com/p/android/issues/detail?id=190975
+            // and http://stackoverflow.com/a/34658002/3485324
+            @Override
+            public void onDrawerOpened(View drawerView) {
+                super.onDrawerOpened(drawerView);
+                if (mNavigationView.requestFocus())
+                    ((NavigationMenuView) mNavigationView.getFocusedChild()).setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+            }
+        };
+
+        // Set the drawer toggle as the DrawerListener
+        mDrawerLayout.setDrawerListener(mDrawerToggle);
+        // set a custom shadow that overlays the main content when the drawer opens
         mDrawerLayout.setDrawerShadow(R.drawable.drawer_shadow, GravityCompat.START);
 
+        if (getIntent().getBooleanExtra(StartActivity.EXTRA_UPGRADE, false)) {
+            mUpgrade = true;
+            mFirstRun = getIntent().getBooleanExtra(StartActivity.EXTRA_FIRST_RUN, false);
+            /*
+             * The sliding menu is automatically opened when the user closes
+             * the info dialog. If (for any reason) the dialog is not shown,
+             * open the menu after a short delay.
+             */
+            new Handler().postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    mDrawerLayout.openDrawer(mNavigationView);
+                }
+            }, 500);
+            getIntent().removeExtra(StartActivity.EXTRA_UPGRADE);
+        }
+
         /* Reload the latest preferences */
+        reloadPreferences();
         mScanNeeded = savedInstanceState == null && mSettings.getBoolean("auto_rescan", true);
-        mExtensionsManager = ExtensionsManager.getInstance();
+
         mMediaLibrary = VLCApplication.getMLInstance();
     }
 
     private void setupNavigationView() {
-        mNavigationView = findViewById(R.id.navigation);
+        mNavigationView = (NavigationView) findViewById(R.id.navigation);
         if (TextUtils.equals(BuildConfig.FLAVOR_target, "chrome")) {
             MenuItem item = mNavigationView.getMenu().findItem(R.id.nav_directories);
             item.setTitle(R.string.open);
         }
+        if (!config.isDeviceAudios()) {
+            MenuItem item = mNavigationView.getMenu().findItem(R.id.nav_audio);
+            item.setVisible(false);
+        }
+        if (!config.isDeviceVideos()) {
+            MenuItem item = mNavigationView.getMenu().findItem(R.id.nav_video);
+            item.setVisible(false);
+        }
+
         mNavigationView.getMenu().findItem(R.id.nav_history).setVisible(mSettings.getBoolean(PreferencesFragment.PLAYBACK_HISTORY, true));
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           @NonNull String permissions[], int[] grantResults) {
+        switch (requestCode) {
+            case Permissions.PERMISSION_STORAGE_TAG:
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Intent serviceIntent = new Intent(MediaParsingService.ACTION_INIT, null, this, MediaParsingService.class);
+                    serviceIntent.putExtra(StartActivity.EXTRA_FIRST_RUN, mFirstRun);
+                    serviceIntent.putExtra(StartActivity.EXTRA_UPGRADE, mUpgrade);
+                    startService(serviceIntent);
+                } else
+                    Permissions.showStoragePermissionDialog(this, false);
+                break;
+            // other 'case' lines to check for other
+            // permissions this app might request
+        }
     }
 
     @Override
@@ -145,86 +257,78 @@ public class MainActivity extends ContentActivity implements FilterQueryProvider
 
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     private void prepareActionBar() {
-        final ActionBar actionBar = getSupportActionBar();
+        ActionBar actionBar = getSupportActionBar();
         actionBar.setDisplayHomeAsUpEnabled(true);
         actionBar.setHomeButtonEnabled(true);
+        actionBar.setBackgroundDrawable(new ColorDrawable(((VLCApplication)getApplication()).getConfig().getColorPrimary()));
+
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        if (mMediaLibrary.isInitiated()) {
-            /* Load media items from database and storage */
-            if (mScanNeeded && Permissions.canReadStorage(this))
-                startService(new Intent(Constants.ACTION_RELOAD, null,this, MediaParsingService.class));
-        }
-        mNavigationView.setNavigationItemSelectedListener(mNavigator);
-        if (BuildConfig.DEBUG)
-            createExtensionServiceConnection();
+
+        //Deactivated for now
+//        createExtensionServiceConnection();
+
+        clearBackstackFromClass(ExtensionBrowser.class);
     }
 
     @Override
     protected void onStop() {
         super.onStop();
-        mNavigationView.setNavigationItemSelectedListener(null);
-        if (getChangingConfigurations() == 0) {
-            /* Check for an ongoing scan that needs to be resumed during onResume */
-            mScanNeeded = mMediaLibrary.isWorking();
-        }
-        if (isExtensionServiceBinded()) {
+        if (mExtensionServiceConnection != null) {
             unbindService(mExtensionServiceConnection);
             mExtensionServiceConnection = null;
         }
-        if (mNavigator.currentIdIsExtension())
-            mSettings.edit()
-                    .putString("current_extension_name", mExtensionsManager.getExtensions(getApplication(), false).get(mNavigator.getCurrentFragmentId()).componentName().getPackageName())
-                    .apply();
-    }
-
-    public boolean isExtensionServiceBinded() {
-        return mExtensionServiceConnection != null;
     }
 
     private void loadPlugins() {
-        final List<ExtensionListing> plugins = mExtensionsManager.getExtensions(this, true);
+        Menu navMenu = mNavigationView.getMenu();
+        navMenu.removeGroup(PLUGIN_NAVIGATION_GROUP);
+        List<ExtensionListing> plugins = mExtensionManagerService.updateAvailableExtensions();
         if (plugins.isEmpty()) {
             unbindService(mExtensionServiceConnection);
             mExtensionServiceConnection = null;
             mExtensionManagerService.stopSelf();
             return;
         }
-        final MenuItem extensionGroup = mNavigationView.getMenu().findItem(R.id.extensions_group);
-        extensionGroup.getSubMenu().clear();
-        for (int id = 0; id < plugins.size(); ++id) {
-            final ExtensionListing extension = plugins.get(id);
-            final String key = "extension_" + extension.componentName().getPackageName();
-            if (mSettings.contains(key)) {
-                mExtensionsManager.displayPlugin(this, id, extension, mSettings.getBoolean(key, false));
-            } else {
-                mExtensionsManager.showExtensionPermissionDialog(this, id, extension, key);
+        PackageManager pm = getPackageManager();
+        SubMenu subMenu = navMenu.addSubMenu(PLUGIN_NAVIGATION_GROUP, PLUGIN_NAVIGATION_GROUP,
+                PLUGIN_NAVIGATION_GROUP, R.string.plugins);
+        for (int i = 0 ; i < plugins.size() ; ++i) {
+            ExtensionListing extension = plugins.get(i);
+            MenuItem item = subMenu.add(PLUGIN_NAVIGATION_GROUP, i, 0, extension.title());
+            int iconRes = extension.menuIcon();
+            Drawable extensionIcon = null;
+            if (iconRes != 0) {
+                try {
+                    Resources res = getApplicationContext().getPackageManager().getResourcesForApplication(extension.componentName().getPackageName());
+                    extensionIcon = res.getDrawable(extension.menuIcon());
+                } catch (PackageManager.NameNotFoundException e) {}
             }
-        }
-        if (extensionGroup.getSubMenu().size() == 0) extensionGroup.setVisible(false);
-        onPluginsLoaded();
-        mNavigationView.invalidate();
-    }
-
-    private void onPluginsLoaded() {
-        if (mNavigator.getCurrentFragment() == null && mNavigator.currentIdIsExtension())
-            if (mExtensionsManager.previousExtensionIsEnabled(getApplication()))
-                mExtensionManagerService.openExtension(mNavigator.getCurrentFragmentId());
+            if (extensionIcon != null)
+                item.setIcon(extensionIcon);
             else
-                mNavigator.showFragment(R.id.nav_video);
+                try {
+                    item.setIcon(pm.getApplicationIcon(plugins.get(i).componentName().getPackageName()));
+                } catch (PackageManager.NameNotFoundException e) {
+                    item.setIcon(R.drawable.app_icon);
+                }
+        }
+        mNavigationView.invalidate();
     }
 
     private void createExtensionServiceConnection() {
         mExtensionServiceConnection = new ServiceConnection() {
+
             @Override
             public void onServiceConnected(ComponentName name, IBinder service) {
                 mExtensionManagerService = ((ExtensionManagerService.LocalBinder)service).getService();
                 mExtensionManagerService.setExtensionManagerActivity(MainActivity.this);
                 loadPlugins();
             }
+
             @Override
             public void onServiceDisconnected(ComponentName name) {}
         };
@@ -234,25 +338,70 @@ public class MainActivity extends ContentActivity implements FilterQueryProvider
             mExtensionServiceConnection = null;
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mMediaLibrary.isInitiated()) {
+            /* Load media items from database and storage */
+            if (mScanNeeded && Permissions.canReadStorage())
+                startService(new Intent(MediaParsingService.ACTION_RELOAD, null,this, MediaParsingService.class));
+            else
+                restoreCurrentList();
+        }
+        mNavigationView.setNavigationItemSelectedListener(this);
+        mNavigationView.setCheckedItem(mCurrentFragmentId);
+        mCurrentFragmentId = mSettings.getInt("fragment_id", R.id.nav_home);
+        if (adView != null) {
+            adView.onResume();//into onResume()
+        }
+
+    }
+
+    @Override
+    protected void onResumeFragments() {
+        super.onResumeFragments();
+        if (mCurrentFragment == null)
+            showFragment(mCurrentFragmentId);
+    }
+
+    /**
+     * Stop audio player and save opened tab
+     */
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mNavigationView.setNavigationItemSelectedListener(null);
+        if (getChangingConfigurations() == 0) {
+            /* Check for an ongoing scan that needs to be resumed during onResume */
+            mScanNeeded = mMediaLibrary.isWorking();
+        }
+        /* Save the tab status in pref */
+        SharedPreferences.Editor editor = mSettings.edit();
+        editor.putInt("fragment_id", mCurrentFragmentId);
+        editor.apply();
+        if (adView != null) {
+            adView.onPause();//into onPause()
+        }
+
+    }
+
     protected void onSaveInstanceState(Bundle outState) {
-        final Fragment current = mNavigator.getCurrentFragment();
-        if (!(current instanceof ExtensionBrowser)) getSupportFragmentManager().putFragment(outState, "current_fragment", current);
         super.onSaveInstanceState(outState);
-        outState.putInt("current", mNavigator.getCurrentFragmentId());
+        outState.putInt("current", mCurrentFragmentId);
     }
 
     @Override
     protected void onRestart() {
         super.onRestart();
         /* Reload the latest preferences */
-        mNavigator.reloadPreferences();
+        reloadPreferences();
     }
 
     @Override
     public void onBackPressed() {
         /* Close the menu first */
-        if (mDrawerLayout.isDrawerOpen(mNavigationView)) {
-            closeDrawer();
+        if(mDrawerLayout.isDrawerOpen(mNavigationView)) {
+            mDrawerLayout.closeDrawer(mNavigationView);
             return;
         }
 
@@ -261,25 +410,75 @@ public class MainActivity extends ContentActivity implements FilterQueryProvider
             return;
 
         // If it's the directory view, a "backpressed" action shows a parent.
-        final Fragment fragment = getCurrentFragment();
-        if (fragment instanceof BaseBrowserFragment && ((BaseBrowserFragment)fragment).goBack()){
+        Fragment fragment = getCurrentFragment();
+        if (fragment instanceof BaseBrowserFragment){
+            ((BaseBrowserFragment)fragment).goBack();
             return;
         } else if (fragment instanceof ExtensionBrowser) {
             ((ExtensionBrowser) fragment).goBack();
             return;
         }
-        if (AndroidUtil.isNougatOrLater && isInMultiWindowMode()) {
-            UiTools.confirmExit(this);
-            return;
-        }
         finish();
     }
 
+    @NonNull
+    private Fragment getNewFragment(int id) {
+        switch (id) {
+            case R.id.nav_home:
+                return new HomeFragment();
+            case R.id.nav_audio:
+                return new AudioBrowserFragment();
+            case R.id.nav_directories:
+                return new FileBrowserFragment();
+            case R.id.nav_history:
+                return new HistoryFragment();
+            default:
+                return new VideoGridFragment();
+        }
+    }
+
     @Override
-    public void displayExtensionItems(int extensionId, String title, List<VLCExtensionItem> items, boolean showParams, boolean refresh) {
-        mNavigator.displayExtensionItems(extensionId, title, items, showParams, refresh);
-        mNavigationView.getMenu().findItem(extensionId).setCheckable(true);
-        updateCheckedItem(extensionId);
+    public void displayExtensionItems(String title, List<VLCExtensionItem> items, boolean showParams, boolean refresh) {
+
+        if (refresh && getCurrentFragment() instanceof ExtensionBrowser) {
+            ExtensionBrowser browser = (ExtensionBrowser) getCurrentFragment();
+            browser.doRefresh(title, items);
+        } else {
+            ExtensionBrowser fragment = new ExtensionBrowser();
+            ArrayList<VLCExtensionItem> list = new ArrayList<>(items);
+            Bundle args = new Bundle();
+            args.putParcelableArrayList(ExtensionBrowser.KEY_ITEMS_LIST, list);
+            args.putBoolean(ExtensionBrowser.KEY_SHOW_FAB, showParams);
+            args.putString(ExtensionBrowser.KEY_TITLE, title);
+            fragment.setArguments(args);
+            fragment.setExtensionService(mExtensionManagerService);
+
+            FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+            ft.setCustomAnimations(R.anim.anim_enter_right, 0, R.anim.anim_enter_left, 0);
+            ft.replace(R.id.fragment_placeholder, fragment, title);
+            if (!(getCurrentFragment() instanceof ExtensionBrowser))
+                ft.addToBackStack(getTag(mCurrentFragmentId));
+            else
+                ft.addToBackStack(title);
+            ft.commit();
+        }
+    }
+
+    /**
+     * Show a secondary fragment.
+     */
+    public void showSecondaryFragment(String fragmentTag) {
+        showSecondaryFragment(fragmentTag, null);
+    }
+
+    public void showSecondaryFragment(String fragmentTag, String param) {
+        Intent i = new Intent(this, SecondaryActivity.class);
+        i.putExtra("fragment", fragmentTag);
+        if (param != null)
+            i.putExtra("param", param);
+        startActivityForResult(i, ACTIVITY_RESULT_SECONDARY);
+        // Slide down the audio player if needed.
+        slideDownAudioPlayer();
     }
 
     @Nullable
@@ -294,7 +493,7 @@ public class MainActivity extends ContentActivity implements FilterQueryProvider
      */
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        closeDrawer();
+        mDrawerLayout.closeDrawer(mNavigationView);
         UiTools.setKeyboardVisibility(mDrawerLayout, false);
 
         // Handle item selection
@@ -304,8 +503,11 @@ public class MainActivity extends ContentActivity implements FilterQueryProvider
                 forceRefresh();
                 return true;
             case android.R.id.home:
-                // Slide down the audio player or toggle the sidebar
-                return slideDownAudioPlayer() || mDrawerToggle.onOptionsItemSelected(item);
+                // Slide down the audio player.
+                if (slideDownAudioPlayer())
+                    return true;
+                /* Toggle the sidebar */
+                return mDrawerToggle.onOptionsItemSelected(item);
             default:
                 return super.onOptionsItemSelected(item);
         }
@@ -320,17 +522,20 @@ public class MainActivity extends ContentActivity implements FilterQueryProvider
             if(current != null && current instanceof IRefreshable)
                 ((IRefreshable) current).refresh();
             else
-                startService(new Intent(Constants.ACTION_RELOAD, null,this, MediaParsingService.class));
+                startService(new Intent(MediaParsingService.ACTION_RELOAD, null,this, MediaParsingService.class));
         }
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == Constants.ACTIVITY_RESULT_PREFERENCES) {
+        if (requestCode == ACTIVITY_RESULT_PREFERENCES) {
             switch (resultCode) {
                 case PreferencesActivity.RESULT_RESCAN:
-                    startService(new Intent(Constants.ACTION_RELOAD, null,this, MediaParsingService.class));
+                    for (Fragment fragment : getSupportFragmentManager().getFragments())
+                        if (fragment instanceof MediaBrowserFragment)
+                            ((MediaBrowserFragment) fragment).clear();
+                    startService(new Intent(MediaParsingService.ACTION_RELOAD, null,this, MediaParsingService.class));
                     break;
                 case PreferencesActivity.RESULT_RESTART:
                 case PreferencesActivity.RESULT_RESTART_APP:
@@ -343,13 +548,10 @@ public class MainActivity extends ContentActivity implements FilterQueryProvider
                         if (fragment instanceof VideoGridFragment)
                             ((VideoGridFragment) fragment).updateSeenMediaMarker();
                     break;
-                case PreferencesActivity.RESULT_UPDATE_ARTISTS:
-                    final Fragment fragment = getCurrentFragment();
-                    if (fragment instanceof AudioBrowserFragment) ((AudioBrowserFragment) fragment).updateArtists();
             }
-        } else if (requestCode == Constants.ACTIVITY_RESULT_OPEN && resultCode == RESULT_OK){
+        } else if (requestCode == ACTIVITY_RESULT_OPEN && resultCode == RESULT_OK){
             MediaUtils.openUri(this, data.getData());
-        } else if (requestCode == Constants.ACTIVITY_RESULT_SECONDARY) {
+        } else if (requestCode == ACTIVITY_RESULT_SECONDARY) {
             if (resultCode == PreferencesActivity.RESULT_RESCAN) {
                 forceRefresh(getCurrentFragment());
             }
@@ -365,7 +567,7 @@ public class MainActivity extends ContentActivity implements FilterQueryProvider
                 (Build.MANUFACTURER.compareTo("LGE") == 0)) {
             return true;
         } else if (keyCode == KeyEvent.KEYCODE_SEARCH) {
-            mToolbar.getMenu().findItem(R.id.ml_menu_filter).expandActionView();
+            MenuItemCompat.expandActionView(mMenu.findItem(R.id.ml_menu_filter));
         }
         return super.onKeyDown(keyCode, event);
     }
@@ -384,6 +586,10 @@ public class MainActivity extends ContentActivity implements FilterQueryProvider
         return super.onKeyUp(keyCode, event);
     }
 
+    private void reloadPreferences() {
+        mCurrentFragmentId = mSettings.getInt("fragment_id", R.id.nav_home);
+    }
+
     @Override
     public Cursor runQuery(final CharSequence constraint) {
         return null;
@@ -395,29 +601,147 @@ public class MainActivity extends ContentActivity implements FilterQueryProvider
         return false;
     }
 
-    public void closeDrawer() {
-        mDrawerLayout.closeDrawer(mNavigationView);
+    @Override
+    public boolean onQueryTextChange(String filterQueryString) {
+        if (filterQueryString.length() < 3)
+            return false;
+        Fragment current = getCurrentFragment();
+        if (current instanceof Filterable) {
+            ((Filterable) current).getFilter().filter(filterQueryString);
+            return true;
+        }
+        return false;
     }
 
-    public void updateCheckedItem(int id) {
-        switch (id) {
-            case R.id.nav_mrl:
-            case R.id.nav_settings:
-            case R.id.nav_about:
-                return;
-            default:
-                final int currentId = mNavigator.getCurrentFragmentId();
-                if (id != currentId && mNavigationView.getMenu().findItem(id) != null) {
-                    if (mNavigationView.getMenu().findItem(currentId) != null)
-                        mNavigationView.getMenu().findItem(currentId).setChecked(false);
-                    mNavigationView.getMenu().findItem(id).setChecked(true);
-                    /* Save the tab status in pref */
-                    mSettings.edit().putInt("fragment_id", id).apply();
+    @Override
+    public boolean onNavigationItemSelected(MenuItem item) {
+        // This should not happen
+        if(item == null)
+            return false;
+
+
+
+        int id = item.getItemId();
+        Fragment current = getCurrentFragment();
+
+        if (item.getGroupId() == PLUGIN_NAVIGATION_GROUP)  {
+            mExtensionManagerService.openExtension(id);
+            mCurrentFragmentId = id;
+        } else {
+            if (mExtensionServiceConnection != null)
+                mExtensionManagerService.disconnect();
+
+            if (current == null) {
+                mDrawerLayout.closeDrawer(mNavigationView);
+                return false;
+            }
+
+            if(mCurrentFragmentId == id) { /* Already selected */
+                // Go back at root level of current browser
+                if (current instanceof BaseBrowserFragment && !((BaseBrowserFragment) current).isRootDirectory()) {
+                    clearBackstackFromClass(current.getClass());
+                } else {
+                    mDrawerLayout.closeDrawer(mNavigationView);
+                    return false;
                 }
+            }else {
+                getSupportActionBar().setTitle(null); //clear title
+                getSupportActionBar().setSubtitle(null); //clear subtitle
+            }
+
+            switch (id){
+                case R.id.nav_about:
+                    showSecondaryFragment(SecondaryActivity.ABOUT);
+                    break;
+                case R.id.nav_settings:
+                    startActivityForResult(new Intent(this, PreferencesActivity.class), ACTIVITY_RESULT_PREFERENCES);
+                    break;
+                case R.id.nav_mrl:
+                    new MRLPanelFragment().show(getSupportFragmentManager(), "fragment_mrl");
+                    break;
+                case R.id.nav_directories:
+                    if (TextUtils.equals(BuildConfig.FLAVOR_target, "chrome")) {
+                        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                        intent.setType("audio/* video/*");
+                        startActivityForResult(intent, ACTIVITY_RESULT_OPEN);
+                        mDrawerLayout.closeDrawer(mNavigationView);
+                        return true;
+                    }
+                default:
+                /* Slide down the audio player */
+                    slideDownAudioPlayer();
+
+                /* Switch the fragment */
+                    showFragment(id);
+            }
+        }
+        mNavigationView.setCheckedItem(mCurrentFragmentId);
+        mDrawerLayout.closeDrawer(mNavigationView);
+        return true;
+    }
+
+    public void showFragment(int id) {
+        FragmentManager fm = getSupportFragmentManager();
+        //noinspection StatementWithEmptyBody
+        while (fm.popBackStackImmediate()); // Clear backstack
+        String tag = getTag(id);
+        //Get new fragment
+        Fragment fragment = null;
+        boolean add = false;
+        WeakReference<Fragment> wr = mFragmentsStack.get(tag);
+        if (wr != null)
+            fragment = wr.get();
+        if (fragment == null) {
+            fragment = getNewFragment(id);
+            mFragmentsStack.put(tag, new WeakReference<>(fragment));
+            add = true;
+        }
+        if (mCurrentFragment != null)
+            fm.beginTransaction().hide(mCurrentFragment).commit();
+        FragmentTransaction ft = fm.beginTransaction();
+        if (add)
+            ft.add(R.id.fragment_placeholder, fragment, tag);
+        else
+            ft.show(fragment);
+        ft.commit();
+        mCurrentFragment = fragment;
+        mCurrentFragmentId = id;
+    }
+
+    private void clearBackstackFromClass(Class clazz) {
+        FragmentManager fm = getSupportFragmentManager();
+        Fragment current = getCurrentFragment();
+        while (clazz.isInstance(current)) {
+            if (!fm.popBackStackImmediate())
+                break;
+            current = getCurrentFragment();
         }
     }
 
-    public Navigator getNavigator() {
-        return mNavigator;
+    private String getTag(int id){
+        switch (id){
+            case R.id.nav_about:
+                return ID_ABOUT;
+            case R.id.nav_settings:
+                return ID_PREFERENCES;
+            case R.id.nav_audio:
+                return ID_AUDIO;
+            case R.id.nav_directories:
+                return ID_DIRECTORIES;
+            case R.id.nav_history:
+                return ID_HISTORY;
+            case R.id.nav_home:
+                return ID_HOME;
+            case R.id.nav_mrl:
+                return ID_MRL;
+            default:
+                return ID_VIDEO;
+        }
+    }
+
+    protected Fragment getCurrentFragment() {
+        return mCurrentFragment instanceof BaseBrowserFragment
+                ? getSupportFragmentManager().findFragmentById(R.id.fragment_placeholder)
+                : mCurrentFragment;
     }
 }

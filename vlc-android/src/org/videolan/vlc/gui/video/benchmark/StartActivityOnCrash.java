@@ -23,10 +23,6 @@ package org.videolan.vlc.gui.video.benchmark;
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.util.Log;
-
-import java.io.PrintWriter;
-import java.io.StringWriter;
 
 public final class StartActivityOnCrash implements Thread.UncaughtExceptionHandler {
 

@@ -62,7 +62,7 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         public static final int PausableChanged     = 0x10e;
         //public static final int TitleChanged        = 0x10f;
         //public static final int SnapshotTaken       = 0x110;
-        public static final int LengthChanged       = 0x111;
+        //public static final int LengthChanged       = 0x111;
         public static final int Vout                = 0x112;
         //public static final int ScrambledChanged    = 0x113;
         public static final int ESAdded             = 0x114;
@@ -87,11 +87,6 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         public long getTimeChanged() {
             return arg1;
         }
-
-        public long getLengthChanged() {
-            return arg1;
-        }
-
         public float getPositionChanged() {
             return argf1;
         }
@@ -362,17 +357,14 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
     private Media mMedia = null;
     private boolean mPlaying = false;
     private boolean mPlayRequested = false;
-    private boolean mListenAudioPlug = true;
+    private boolean mAudioDeviceFromUser = false;
     private int mVoutCount = 0;
     private boolean mAudioReset = false;
     private String mAudioOutput = "android_audiotrack";
     private String mAudioOutputDevice = null;
 
     private boolean mAudioPlugRegistered = false;
-    private boolean mAudioDigitalOutputEnabled = false;
     private String mAudioPlugOutputDevice = "stereo";
-
-    private boolean mCanDoPassthrough;
 
     private final AWindow mWindow = new AWindow(new AWindow.SurfaceCallback() {
         @Override
@@ -403,9 +395,8 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         }
     });
 
-    private synchronized void updateAudioOutputDevice(long encodingFlags, String defaultDevice) {
-        mCanDoPassthrough = encodingFlags != 0;
-        final String newDeviceId = mAudioDigitalOutputEnabled && mCanDoPassthrough ? "encoded:" + encodingFlags : defaultDevice;
+    private void updateAudioOutputDevice(long encodingFlags, String defaultDevice) {
+        final String newDeviceId = encodingFlags != 0 ? "encoded:" + encodingFlags : defaultDevice;
         if (!newDeviceId.equals(mAudioPlugOutputDevice)) {
             mAudioPlugOutputDevice = newDeviceId;
             setAudioOutputDeviceInternal(mAudioPlugOutputDevice, false);
@@ -426,8 +417,6 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
     }
 
     private long getEncodingFlags(int encodings[]) {
-        if (encodings == null)
-            return 0;
         long encodingFlags = 0;
         for (int encoding : encodings) {
             if (isEncoded(encoding))
@@ -587,14 +576,6 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         }
     }
 
-    public int setRenderer(RendererItem item) {
-        return nativeSetRenderer(item);
-    }
-
-    public synchronized boolean hasMedia() {
-        return mMedia != null;
-    }
-
     /**
      * Get the Media used by this MediaPlayer. This Media should be released with {@link #release()}.
      */
@@ -619,7 +600,7 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
                         nativeSetAudioOutputDevice(mAudioOutputDevice);
                     mAudioReset = false;
                 }
-                if (mListenAudioPlug)
+                if (!mAudioDeviceFromUser)
                     registerAudioPlug(true);
                 mPlayRequested = true;
                 if (mWindow.areSurfacesWaiting())
@@ -694,10 +675,6 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         nativeSetAspectRatio(aspect);
     }
 
-    private boolean isAudioTrack() {
-        return mAudioOutput != null && mAudioOutput.equals("android_audiotrack");
-    }
-
     /**
      * Update the video viewpoint information
      *
@@ -725,108 +702,50 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
      *
      * @return true on success.
      */
-    public synchronized boolean setAudioOutput(String aout) {
-        mAudioOutput = aout;
-        /* If The user forced an output different than AudioTrack, don't listen to audio
-         * plug events and let the user decide */
-        mListenAudioPlug = isAudioTrack();
-        if (!mListenAudioPlug)
-            registerAudioPlug(false);
-
+    public boolean setAudioOutput(String aout) {
         final boolean ret = nativeSetAudioOutput(aout);
-
-        if (!ret) {
-            mAudioOutput = null;
-            mListenAudioPlug = false;
-        }
-
-        if (mListenAudioPlug)
-            registerAudioPlug(true);
-
-        return ret;
-    }
-
-    /**
-     * Enable or disable Digital Output
-     *
-     * Works only with AudioTrack AudioOutput.
-     * If {@link #setAudioOutputDevice} was previously called, this method won't have any effects.
-     *
-     * @param enabled true to enable Digital Output
-     * @return true on success
-     */
-    public synchronized boolean setAudioDigitalOutputEnabled(boolean enabled) {
-        if (enabled == mAudioDigitalOutputEnabled)
-            return true;
-        if (!mListenAudioPlug || !isAudioTrack())
-            return false;
-
-        registerAudioPlug(false);
-        mAudioDigitalOutputEnabled = enabled;
-        registerAudioPlug(true);
-        return true;
-    }
-
-    /** Convenient method for {@link #setAudioOutputDevice}
-     *
-     * @param encodings list of encodings to play via passthrough (see AudioFormat.ENCODING_*),
-     *                  null to don't force any.
-     * @return true on success
-     */
-    public synchronized boolean forceAudioDigitalEncodings(int []encodings) {
-        if (!isAudioTrack())
-            return false;
-
-        if (encodings.length == 0)
-            setAudioOutputDeviceInternal(null, true);
-        else {
-            final String newDeviceId = "encoded:" + getEncodingFlags(encodings);
-            if (!newDeviceId.equals(mAudioPlugOutputDevice)) {
-                mAudioPlugOutputDevice = newDeviceId;
-                setAudioOutputDeviceInternal(mAudioPlugOutputDevice, true);
+        if (ret) {
+            synchronized (this) {
+                mAudioOutput = aout;
+                /* The user forced an output, don't listen to audio plug events and let the user decide */
+                mAudioDeviceFromUser = true;
+                registerAudioPlug(false);
             }
         }
-        return true;
-    }
-
-    private synchronized boolean setAudioOutputDeviceInternal(String id, boolean fromUser) {
-        mAudioOutputDevice = id;
-        if (fromUser) {
-            /* The user forced a device, don't listen to audio plug events and let the user decide */
-            mListenAudioPlug = mAudioOutputDevice == null && isAudioTrack();
-            if (!mListenAudioPlug)
-                registerAudioPlug(false);
-        }
-
-        final boolean ret = nativeSetAudioOutputDevice(id);
-
-        if (!ret) {
-            mAudioOutputDevice = null;
-            mListenAudioPlug = false;
-        }
-
-        if (mListenAudioPlug)
-            registerAudioPlug(true);
-
         return ret;
     }
 
-    /**
-     * Configures an explicit audio output device.
-     * Audio output will be moved to the device specified by the device identifier string.
-     *
-     * Available devices for the "android_audiotrack" module (the default) are
-     * "stereo": Up to 2 channels (compat mode).
-     * "pcm": Up to 8 channels.
-     * "encoded": Up to 8 channels, passthrough for every encodings if available.
-     * "encoded:ENCODING_FLAGS_MASK": passthrough for every encodings specified by
-     * ENCODING_FLAGS_MASK. This extra value is a long that contains binary-shifted
-     * AudioFormat.ENCODING_* values.
-     *
-     * Calling this method will disable the encoding detection (see {@link #setAudioOutput} and {@link #setAudioDigitalOutputEnabled(boolean)}).
-     *
-     * @return true on success.
-     */
+    private boolean setAudioOutputDeviceInternal(String id, boolean fromUser) {
+        final boolean ret = nativeSetAudioOutputDevice(id);
+        if (ret) {
+            synchronized (this) {
+                mAudioOutputDevice = id;
+                if (fromUser) {
+                    /* The user forced a device, don't listen to audio plug events and let the user decide */
+                    mAudioDeviceFromUser = true;
+                    registerAudioPlug(false);
+                }
+            }
+        }
+        return ret;
+    }
+
+        /**
+         * Configures an explicit audio output device.
+         * Audio output will be moved to the device specified by the device identifier string.
+         *
+         * Available devices for the "android_audiotrack" module (the default) are
+         * "stereo": Up to 2 channels (compat mode).
+         * "pcm": Up to 8 channels.
+         * "encoded": Up to 8 channels, passthrough for every encodings if available.
+         * "encoded:ENCODING_FLAGS_MASK": passthrough for every encodings specified by
+         * ENCODING_FLAGS_MASK. This extra value is a long that contains binary-shifted
+         * AudioFormat.ENCODING_* values.
+         *
+         * Calling this method will disable the encoding detection (see {@link #setAudioOutput}).
+         *
+         * @return true on success.
+         */
     public boolean setAudioOutputDevice(String id) {
         return setAudioOutputDeviceInternal(id, true);
     }
@@ -1175,8 +1094,6 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
                 return new Event(eventType);
             case Event.TimeChanged:
                 return new Event(eventType, arg1);
-            case Event.LengthChanged:
-                return new Event(eventType, arg1);
             case Event.PositionChanged:
                 return new Event(eventType, argf1);
             case Event.Vout:
@@ -1200,12 +1117,7 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
 
         if (mMedia != null)
             mMedia.release();
-        mVoutCount = 0;
         nativeRelease();
-    }
-
-    public boolean canDoPassthrough() {
-        return mCanDoPassthrough;
     }
 
     /* JNI */
@@ -1215,7 +1127,6 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
     private native void nativeSetMedia(Media media);
     private native void nativePlay();
     private native void nativeStop();
-    private native int nativeSetRenderer(RendererItem item);
     private native void nativeSetVideoTitleDisplay(int position, int timeout);
     private native float nativeGetScale();
     private native void nativeSetScale(float scale);

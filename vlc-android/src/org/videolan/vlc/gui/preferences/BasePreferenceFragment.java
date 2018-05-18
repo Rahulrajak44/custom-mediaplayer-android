@@ -28,9 +28,13 @@ import android.support.v14.preference.MultiSelectListPreference;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.Fragment;
 import android.support.v7.preference.Preference;
+import android.support.v7.preference.PreferenceCategory;
 import android.support.v7.preference.PreferenceFragmentCompat;
+import android.support.v7.preference.PreferenceGroup;
 
+import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.vlc.R;
+import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.gui.preferences.hack.MultiSelectListPreferenceDialogFragmentCompat;
 
 public abstract class BasePreferenceFragment extends PreferenceFragmentCompat {
@@ -43,16 +47,32 @@ public abstract class BasePreferenceFragment extends PreferenceFragmentCompat {
     @Override
     public void onCreatePreferences(Bundle bundle, String s) {
         addPreferencesFromResource(getXml());
+        findPrefereces(getPreferenceScreen());
+
+    }
+
+    private void findPrefereces(PreferenceGroup preferenceScreen){
+        for (int i = 0; i< preferenceScreen.getPreferenceCount();i++){
+            Preference preference = preferenceScreen.getPreference(i);
+            if(preference instanceof PreferenceCategory){
+                ((CustomPreferenceCategory)preference).setColor(((VLCApplication)getActivity().getApplication()).getConfig().getColorAccent());
+                findPrefereces((PreferenceGroup) preference);
+            }else if(preference instanceof CustomCheckBoxPreference){
+                ((CustomCheckBoxPreference)preference).setColor(((VLCApplication)getActivity().getApplication()).getConfig().getColorAccent());
+            }
+            else if(preference instanceof CustomSwitchPreference){
+                ((CustomSwitchPreference)preference).setColor(((VLCApplication)getActivity().getApplication()).getConfig().getColorAccent());
+            }
+        }
     }
 
     @Override
     public void onStart() {
         super.onStart();
         final PreferencesActivity activity = (PreferencesActivity)getActivity();
-        if (activity != null) {
-            activity.expandBar();
-            if (activity.getSupportActionBar() != null && getTitleId() != 0)
-                activity.getSupportActionBar().setTitle(getString(getTitleId()));
+        activity.scrollUp();
+        if (activity != null && activity.getSupportActionBar() != null) {
+            activity.getSupportActionBar().setTitle(getString(getTitleId()));
         }
     }
 
@@ -64,7 +84,7 @@ public abstract class BasePreferenceFragment extends PreferenceFragmentCompat {
 
     @Override
     public void onDisplayPreferenceDialog(Preference preference) {
-        if (preference instanceof MultiSelectListPreference) {
+        if (AndroidUtil.isHoneycombOrLater && preference instanceof MultiSelectListPreference) {
             DialogFragment dialogFragment = MultiSelectListPreferenceDialogFragmentCompat.newInstance(preference.getKey());
             dialogFragment.setTargetFragment(this, 0);
             dialogFragment.show(getFragmentManager(), DIALOG_FRAGMENT_TAG);

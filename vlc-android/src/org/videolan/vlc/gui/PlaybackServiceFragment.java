@@ -31,10 +31,12 @@ import org.videolan.vlc.gui.video.VideoPlayerActivity;
 public abstract class PlaybackServiceFragment extends Fragment implements PlaybackService.Client.Callback {
     protected PlaybackService mService;
 
-    public static PlaybackServiceActivity.Helper getHelper(Activity activity) {
+    private static PlaybackServiceActivity.Helper getHelper(Activity activity) {
         if (activity == null)
             return null;
 
+        if ((activity instanceof AudioPlayerContainerActivity))
+            return ((AudioPlayerContainerActivity) activity).getHelper();
         else if ((activity instanceof PlaybackServiceActivity))
             return ((PlaybackServiceActivity) activity).getHelper();
         else if ((activity instanceof VideoPlayerActivity))

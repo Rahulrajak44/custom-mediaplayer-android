@@ -25,8 +25,9 @@ package org.videolan.vlc.gui.preferences;
 import android.os.Bundle;
 import android.support.v7.preference.Preference;
 
-import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.vlc.R;
+import org.videolan.vlc.VLCApplication;
+import org.videolan.vlc.config.Config;
 
 public class PreferencesVideo extends BasePreferenceFragment {
 
@@ -43,7 +44,15 @@ public class PreferencesVideo extends BasePreferenceFragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        findPreference("popup_keepscreen").setVisible(!AndroidUtil.isOOrLater);
+        Config config = ((VLCApplication)getActivity().getApplication()).getConfig();
+        findPreference("video_min_group_length").setVisible(false);
+        findPreference("media_seen").setVisible(false);
+        findPreference("force_list_portrait").setVisible(false);
+        findPreference("save_brightness").setVisible(false);
+        findPreference("save_individual_audio_delay").setVisible(false);
+        findPreference("video_action_switch").setTitle(getString(R.string.video_app_switch_summary, config.getAppName()));
+        findPreference("video_action_switch").setVisible(false);
+
     }
 
     @Override

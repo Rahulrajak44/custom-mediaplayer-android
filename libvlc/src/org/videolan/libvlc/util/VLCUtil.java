@@ -32,7 +32,6 @@ import org.videolan.libvlc.LibVLC;
 import org.videolan.libvlc.Media;
 
 import java.io.BufferedReader;
-import java.io.Closeable;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -171,8 +170,14 @@ public class VLCUtil {
             }
         } catch (IOException ignored) {
         } finally {
-            close(br);
-            close(fileReader);
+            if (br != null)
+                try {
+                    br.close();
+                } catch (IOException e) {}
+            if (fileReader != null)
+                try {
+                    fileReader.close();
+                } catch (IOException e) {}
         }
         if (processors == 0)
             processors = 1; // possibly borked cpuinfo?
@@ -238,8 +243,14 @@ public class VLCUtil {
             Log.w(TAG, "Could not parse maximum CPU frequency!");
             Log.w(TAG, "Failed to parse: " + line);
         } finally {
-            close(br);
-            close(fileReader);
+            if (br != null)
+                try {
+                    br.close();
+                } catch (IOException ignored) {}
+            if (fileReader != null)
+                try {
+                    fileReader.close();
+                } catch (IOException ignored) {}
         }
 
         // Store into MachineSpecs
@@ -361,10 +372,16 @@ public class VLCUtil {
                     return null;
             }
             return elf;
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
-            close(in);
+            try {
+                if (in != null)
+                    in.close();
+            } catch (IOException e) {
+            }
         }
         return null;
     }
@@ -501,7 +518,7 @@ public class VLCUtil {
         return ret;
     }
 
-    private static final String URI_AUTHORIZED_CHARS = "'()*";
+    private static final String URI_AUTHORIZED_CHARS = "!'()*";
 
     /**
      * VLC authorize only "-._~" in Mrl format, android Uri authorize "_-!.~'()*".
@@ -549,6 +566,7 @@ public class VLCUtil {
             else
                 sb.append(c);
         }
+
         return sb.toString();
     }
 
@@ -572,13 +590,6 @@ public class VLCUtil {
         media.addOption(":no-osd");
         media.addOption(":input-fast-seek");
         return nativeGetThumbnail(media, i_width, i_height);
-    }
-
-    private static void close(Closeable closeable) {
-        if (closeable != null)
-            try {
-                closeable.close();
-            } catch (IOException ignored) {}
     }
 
     private static native byte[] nativeGetThumbnail(Media media, int i_width, int i_height);

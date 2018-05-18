@@ -13,8 +13,8 @@
         android:id="@+id/cover"
         android:layout_width="82dp"
         android:layout_height="82dp"
-        android:background="@color/orange100"
-        android:src="@drawable/icon" />
+        android:background="@color/white"
+        android:src="@drawable/app_icon" />
 
     <RelativeLayout
         android:layout_width="match_parent"
@@ -35,7 +35,6 @@
                 android:layout_gravity="center|left"
                 android:layout_marginLeft="@dimen/half_default_margin"
                 android:ellipsize="end"
-                android:maxLines="1"
                 android:singleLine="true"
                 android:textColor="@color/grey600"
                 android:textSize="14sp" />
@@ -47,9 +46,7 @@
                 android:layout_gravity="center|left"
                 android:layout_marginLeft="@dimen/half_default_margin"
                 android:ellipsize="end"
-                android:maxLines="1"
                 android:singleLine="true"
-                android:text="@string/widget_default_text"
                 android:textColor="@color/grey900"
                 android:textSize="16sp" />
 
@@ -66,7 +63,7 @@
                     android:background="#00ffffff"
                     android:clickable="true"
                     android:scaleType="centerInside"
-                    android:src="@drawable/ic_widget_previous" />
+                    android:src="@drawable/ic_widget_previous_normal" />
 
                 <RelativeLayout
                     android:layout_width="0dp"
@@ -80,7 +77,7 @@
                     android:background="#00ffffff"
                     android:clickable="true"
                     android:scaleType="centerInside"
-                    android:src="@drawable/ic_widget_play" />
+                    android:src="@drawable/ic_widget_play_normal" />
 
                 <RelativeLayout
                     android:layout_width="0dp"
@@ -94,7 +91,7 @@
                     android:background="#00ffffff"
                     android:clickable="true"
                     android:scaleType="centerInside"
-                    android:src="@drawable/ic_widget_next" />
+                    android:src="@drawable/ic_widget_next_normal" />
 
                 <RelativeLayout
                     android:layout_width="0dp"
@@ -108,31 +105,11 @@
                     android:background="#00ffffff"
                     android:clickable="true"
                     android:scaleType="centerInside"
-                    android:src="@drawable/ic_widget_close" />
+                    android:src="@drawable/ic_widget_close_normal" />
             </LinearLayout>
 
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/timeline_parent"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true">
-
-            <ProgressBar
-                android:id="@+id/timeline"
-                style="@android:style/Widget.ProgressBar.Horizontal"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:focusable="false"
-                android:indeterminate="false"
-                android:maxHeight="2dip"
-                android:minHeight="2dip"
-                android:paddingLeft="0px"
-                android:paddingRight="0px"
-                android:progressDrawable="@drawable/progress_widget"
-                android:splitTrack="false" />
-        </LinearLayout>
     </RelativeLayout>
 
 </LinearLayout>

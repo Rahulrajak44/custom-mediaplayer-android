@@ -21,24 +21,41 @@
 package org.videolan.vlc.gui.tv;
 
 import android.annotation.TargetApi;
+import android.app.SearchManager;
+import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.v4.app.FragmentActivity;
+import android.support.v17.leanback.widget.SpeechRecognitionCallback;
 
 import org.videolan.vlc.R;
+import org.videolan.vlc.gui.BaseActivity;
 
 @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
-public class SearchActivity extends FragmentActivity {
-    private static final String TAG = "VLC/SearchActivity";
+public class SearchActivity extends BaseActivity {
 
-    private SearchFragment mFragment;
+    SearchFragment mFragment;
+    private static final int REQUEST_SPEECH = 1;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.tv_search);
-        mFragment = (SearchFragment) getSupportFragmentManager()
+
+        mFragment = (SearchFragment) getFragmentManager()
                 .findFragmentById(R.id.search_fragment);
+        Intent intent = getIntent();
+        if (Intent.ACTION_SEARCH.equals(intent.getAction()) || "com.google.android.gms.actions.SEARCH_ACTION".equals(intent.getAction())) {
+            mFragment.onQueryTextSubmit(intent.getStringExtra(SearchManager.QUERY));
+        } else {
+            SpeechRecognitionCallback speechRecognitionCallback = new SpeechRecognitionCallback() {
+
+                @Override
+                public void recognizeSpeech() {
+                    startActivityForResult(mFragment.getRecognizerIntent(), REQUEST_SPEECH);
+                }
+            };
+            mFragment.setSpeechRecognitionCallback(speechRecognitionCallback);
+        }
     }
 
     @Override

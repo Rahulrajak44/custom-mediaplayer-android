@@ -24,6 +24,9 @@
 package org.videolan.vlc.gui.helpers;
 
 import android.content.Context;
+import android.graphics.PorterDuff;
+import android.graphics.drawable.Drawable;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.widget.AppCompatCheckBox;
 import android.util.AttributeSet;
 import android.widget.CompoundButton;
@@ -36,6 +39,16 @@ public class ThreeStatesCheckbox extends AppCompatCheckBox {
     public static final int STATE_CHECKED = 1;
     public static final int STATE_PARTIAL = 2;
     private int mState = 0;
+
+    private Integer color;
+    private Drawable drawable;
+
+    public void setColor(Integer color) {
+        this.color = color;
+        if(drawable != null){
+            drawable.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+        }
+    }
 
     public ThreeStatesCheckbox(Context context) {
         super(context);
@@ -84,8 +97,11 @@ public class ThreeStatesCheckbox extends AppCompatCheckBox {
             default:
                 btnDrawable = R.drawable.ic_checkbox_false;
         }
-        setButtonDrawable(btnDrawable);
-
+        drawable = ContextCompat.getDrawable(getContext(), btnDrawable);
+        setButtonDrawable(drawable);
+        if(color != null){
+            drawable.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+        }
     }
     public int getState() {
         return mState;

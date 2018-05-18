@@ -32,41 +32,47 @@ import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Filter;
+import android.widget.Filterable;
 import android.widget.Toast;
 
-import org.jetbrains.annotations.NotNull;
-import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.medialibrary.media.MediaWrapper;
 import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
 import org.videolan.vlc.VLCApplication;
+import org.videolan.vlc.config.Config;
 import org.videolan.vlc.databinding.PlaylistItemBinding;
-import org.videolan.vlc.gui.DiffUtilAdapter;
+import org.videolan.vlc.gui.BaseQueuedAdapter;
 import org.videolan.vlc.gui.helpers.UiTools;
 import org.videolan.vlc.interfaces.SwipeDragHelperAdapter;
 import org.videolan.vlc.media.MediaUtils;
-import org.videolan.vlc.util.MediaItemDiffCallback;
 import org.videolan.vlc.util.WeakHandler;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
-public class PlaylistAdapter extends DiffUtilAdapter<MediaWrapper, PlaylistAdapter.ViewHolder> implements SwipeDragHelperAdapter {
+public class PlaylistAdapter extends BaseQueuedAdapter<MediaWrapper, PlaylistAdapter.ViewHolder> implements SwipeDragHelperAdapter, Filterable {
 
     private static final String TAG = "VLC/PlaylistAdapter";
 
+    private ItemFilter mFilter = new ItemFilter();
     private PlaybackService mService = null;
-    private IPlayer mPlayer;
+    private IPlayer mAudioPlayer;
 
+    private ArrayList<MediaWrapper> mOriginalDataSet;
     private int mCurrentIndex = 0;
+    private Config config;
 
     public interface IPlayer {
-        void onPopupMenu(View view, int position, MediaWrapper item);
+        void onPopupMenu(View view, int position);
+        void updateList();
         void onSelectionSet(int position);
-        void playItem(int position, MediaWrapper item);
     }
 
-    public PlaylistAdapter(IPlayer audioPlayer) {
-        mPlayer = audioPlayer;
+    public PlaylistAdapter(IPlayer audioPlayer, Config config) {
+        mAudioPlayer = audioPlayer;
+       this.config = config;
     }
 
     @Override
@@ -82,28 +88,38 @@ public class PlaylistAdapter extends DiffUtilAdapter<MediaWrapper, PlaylistAdapt
         final MediaWrapper media = getItem(position);
         holder.binding.setMedia(media);
         holder.binding.setSubTitle(MediaUtils.getMediaSubtitle(media));
-        holder.binding.setTitleColor(mCurrentIndex == position
-                ? UiTools.getColorFromAttribute(ctx, R.attr.list_title_last)
+        holder.binding.setTitleColor(mOriginalDataSet == null && mCurrentIndex == position
+                ? config.getColorPrimary()
                 : UiTools.getColorFromAttribute(ctx, R.attr.list_title));
         holder.binding.executePendingBindings();
     }
 
     @Override
     public int getItemCount() {
-        return getDataset().size();
+        return mDataset.size();
     }
 
     @MainThread
     public MediaWrapper getItem(int position) {
         if (position >= 0 && position < getItemCount())
-            return getDataset().get(position);
+            return mDataset.get(position);
         else
             return null;
+    }
+
+    @Override
+    public Filter getFilter() {
+        return mFilter;
     }
 
     public String getLocation(int position) {
         MediaWrapper item = getItem(position);
         return item == null ? "" : item.getLocation();
+    }
+
+    @MainThread
+    public void addAll(List<MediaWrapper> playList) {
+        mDataset.addAll(playList);
     }
 
     @Override
@@ -114,8 +130,8 @@ public class PlaylistAdapter extends DiffUtilAdapter<MediaWrapper, PlaylistAdapt
 
     @MainThread
     public void remove(int position) {
-        if (mService == null) return;
-        if (position == mCurrentIndex) mCurrentIndex = -1;
+        if (mService == null)
+            return;
         mService.remove(position);
     }
 
@@ -130,12 +146,12 @@ public class PlaylistAdapter extends DiffUtilAdapter<MediaWrapper, PlaylistAdapt
         mCurrentIndex = position;
         notifyItemChanged(former);
         notifyItemChanged(position);
-        mPlayer.onSelectionSet(position);
+        mAudioPlayer.onSelectionSet(position);
     }
 
     @Override
     public void onItemMove(int fromPosition, int toPosition) {
-        Collections.swap(getDataset(), fromPosition, toPosition);
+        Collections.swap(mDataset, fromPosition, toPosition);
         notifyItemMoved(fromPosition, toPosition);
         mHandler.obtainMessage(PlaylistHandler.ACTION_MOVE, fromPosition, toPosition).sendToTarget();
     }
@@ -144,8 +160,8 @@ public class PlaylistAdapter extends DiffUtilAdapter<MediaWrapper, PlaylistAdapt
     public void onItemDismiss(final int position) {
         final MediaWrapper media = getItem(position);
         String message = String.format(VLCApplication.getAppResources().getString(R.string.remove_playlist_item), media.getTitle());
-        if (mPlayer instanceof Fragment){
-            View v = ((Fragment) mPlayer).getView();
+        if (mAudioPlayer instanceof Fragment){
+            View v = ((Fragment) mAudioPlayer).getView();
             Runnable cancelAction = new Runnable() {
                 @Override
                 public void run() {
@@ -153,7 +169,7 @@ public class PlaylistAdapter extends DiffUtilAdapter<MediaWrapper, PlaylistAdapt
                 }
             };
             UiTools.snackerWithCancel(v, message, null, cancelAction);
-        } else if (mPlayer instanceof Context){
+        } else if (mAudioPlayer instanceof Context){
             Toast.makeText(VLCApplication.getAppContext(), message, Toast.LENGTH_SHORT).show();
         }
         remove(position);
@@ -163,29 +179,45 @@ public class PlaylistAdapter extends DiffUtilAdapter<MediaWrapper, PlaylistAdapt
         mService = service;
     }
 
-    public class ViewHolder extends RecyclerView.ViewHolder {
+    public class ViewHolder extends RecyclerView.ViewHolder{
         PlaylistItemBinding binding;
 
         public ViewHolder(View v) {
             super(v);
             binding = DataBindingUtil.bind(v);
             binding.setHolder(this);
-            if (AndroidUtil.isMarshMallowOrLater) itemView.setOnContextClickListener(new View.OnContextClickListener() {
-                @Override
-                public boolean onContextClick(View v) {
-                    onMoreClick(v);
-                    return true;
-                }
-            });
         }
         public void onClick(View v, MediaWrapper media){
-            int position = getLayoutPosition(); //getMediaPosition(media);
-            mPlayer.playItem(position, media);
+            int position = getMediaPosition(media);
+            if (mService != null)
+                mService.playIndex(position);
+            if (mOriginalDataSet != null)
+                restoreList();
+        }
+        public void onMoreClick(View v){
+            mAudioPlayer.onPopupMenu(v, getLayoutPosition());
         }
 
-        public void onMoreClick(View v) {
-            final int position = getLayoutPosition();
-            mPlayer.onPopupMenu(v, position, getItem(position));
+        private int getMediaPosition(MediaWrapper media) {
+            if (mOriginalDataSet == null)
+                return getLayoutPosition();
+            else {
+                MediaWrapper mw;
+                for (int i = 0 ; i < mOriginalDataSet.size() ; ++i) {
+                    mw = mOriginalDataSet.get(i);
+                    if (mw.equals(media))
+                        return i;
+                }
+                return 0;
+            }
+        }
+    }
+
+    @MainThread
+    public void restoreList() {
+        if (mOriginalDataSet != null) {
+            update(new ArrayList<>(mOriginalDataSet));
+            mOriginalDataSet = null;
         }
     }
 
@@ -213,7 +245,7 @@ public class PlaylistAdapter extends DiffUtilAdapter<MediaWrapper, PlaylistAdapt
                     sendEmptyMessageDelayed(ACTION_MOVED, 1000);
                     break;
                 case ACTION_MOVED:
-                    final PlaybackService service = getOwner().mService;
+                    PlaybackService service = getOwner().mService;
                     if (from != -1 && to != -1 && service == null)
                         return;
                     if (to > from)
@@ -225,9 +257,46 @@ public class PlaylistAdapter extends DiffUtilAdapter<MediaWrapper, PlaylistAdapt
         }
     }
 
-    @NotNull
-    @Override
-    protected DiffCallback<MediaWrapper> createCB() {
-        return new MediaItemDiffCallback();
+    private class ItemFilter extends Filter {
+
+        @Override
+        protected FilterResults performFiltering(CharSequence charSequence) {
+            if (mOriginalDataSet == null)
+                mOriginalDataSet = new ArrayList<>(mDataset);
+            final String[] queryStrings = charSequence.toString().trim().toLowerCase().split(" ");
+            FilterResults results = new FilterResults();
+            ArrayList<MediaWrapper> list = new ArrayList<>();
+            String title, location, artist, album, albumArtist, genre;
+            mediaLoop:
+            for (MediaWrapper media : mOriginalDataSet) {
+                title = MediaUtils.getMediaTitle(media);
+                location = media.getLocation();
+                artist = MediaUtils.getMediaArtist(VLCApplication.getAppContext(), media).toLowerCase();
+                albumArtist = MediaUtils.getMediaAlbumArtist(VLCApplication.getAppContext(), media).toLowerCase();
+                album = MediaUtils.getMediaAlbum(VLCApplication.getAppContext(), media).toLowerCase();
+                genre = MediaUtils.getMediaGenre(VLCApplication.getAppContext(), media).toLowerCase();
+                for (String queryString : queryStrings) {
+                    if (queryString.length() < 2)
+                        continue;
+                    if (title != null && title.toLowerCase().contains(queryString) ||
+                            location != null && location.toLowerCase().contains(queryString) ||
+                            artist.contains(queryString) ||
+                            albumArtist.contains(queryString) ||
+                            album.contains(queryString) ||
+                            genre.contains(queryString)) {
+                        list.add(media);
+                        continue mediaLoop; //avoid duplicates in search results, and skip useless processing
+                    }
+                }
+            }
+            results.values = list;
+            results.count = list.size();
+            return results;
+        }
+
+        @Override
+        protected void publishResults(CharSequence charSequence, FilterResults filterResults) {
+            update((ArrayList<MediaWrapper>) filterResults.values);
+        }
     }
 }

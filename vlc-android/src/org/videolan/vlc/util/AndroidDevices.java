@@ -21,11 +21,15 @@
 package org.videolan.vlc.util;
 
 import android.annotation.TargetApi;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
-import android.net.Uri;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
 import android.os.Build;
+import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Environment;
 import android.telephony.TelephonyManager;
@@ -36,14 +40,18 @@ import android.view.MotionEvent;
 import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.medialibrary.media.MediaWrapper;
 import org.videolan.vlc.R;
+import org.videolan.vlc.RemoteControlClientReceiver;
 import org.videolan.vlc.VLCApplication;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -53,82 +61,95 @@ import java.util.StringTokenizer;
 public class AndroidDevices {
     public final static String TAG = "VLC/UiTools/AndroidDevices";
     public final static String EXTERNAL_PUBLIC_DIRECTORY = Environment.getExternalStorageDirectory().getPath();
-    public final static boolean isPhone;
-    public final static boolean hasCombBar;
-    public final static boolean hasNavBar;
-    public final static boolean hasTsp;
-    public final static boolean isAndroidTv;
-    public final static boolean isAmazon = TextUtils.equals(Build.MANUFACTURER,"Amazon");
-    public final static boolean isChromeBook;
-    public static final boolean hasPiP;
-    public final static boolean showInternalStorage = !TextUtils.equals(Build.BRAND, "Swisscom") && !TextUtils.equals(Build.BOARD, "sprint");
+    public static final File SUBTITLES_DIRECTORY = new File(VLCApplication.getAppContext().getExternalFilesDir(null), "subs");
+
+    final static boolean hasNavBar;
+    final static boolean hasTsp = VLCApplication.getAppContext().getPackageManager().hasSystemFeature("android.hardware.touchscreen");
+    final static boolean isTv = VLCApplication.getAppContext().getPackageManager().hasSystemFeature("android.software.leanback");
+    final static boolean showInternalStorage = !TextUtils.equals(Build.BRAND, "Swisscom") && !TextUtils.equals(Build.BOARD, "sprint");
+    public final static boolean isChromeBook = VLCApplication.getAppContext().getPackageManager().hasSystemFeature("org.chromium.arc.device_management");
     private final static String[] noMediaStyleManufacturers = {"huawei", "symphony teleca"};
     public final static boolean showMediaStyle = !isManufacturerBannedForMediastyleNotifications();
-    public static final boolean hasPlayServices;
+    public static final boolean hasPiP = AndroidUtil.isOOrLater || AndroidUtil.isNougatOrLater && isTv;
 
-    //Devices mountpoints management
-    private static final List<String> typeWL = Arrays.asList("vfat", "exfat", "sdcardfs", "fuse", "ntfs", "fat32", "ext3", "ext4", "esdfs");
-    private static final List<String> typeBL = Arrays.asList("tmpfs");
-    private static final String[] mountWL = {"/mnt", "/Removable", "/storage"};
-    private static final String[] mountBL = {
-            EXTERNAL_PUBLIC_DIRECTORY,
-            "/mnt/secure",
-            "/mnt/shell",
-            "/mnt/asec",
-            "/mnt/nand",
-            "/mnt/runtime",
-            "/mnt/obb",
-            "/mnt/media_rw/extSdCard",
-            "/mnt/media_rw/sdcard",
-            "/storage/emulated",
-            "/var/run/arc"
-    };
-    private static final String[] deviceWL = {
-            "/dev/block/vold",
-            "/dev/fuse",
-            "/mnt/media_rw"
-    };
 
     static {
-        final HashSet<String> devicesWithoutNavBar = new HashSet<>();
+        HashSet<String> devicesWithoutNavBar = new HashSet<>();
         devicesWithoutNavBar.add("HTC One V");
         devicesWithoutNavBar.add("HTC One S");
         devicesWithoutNavBar.add("HTC One X");
         devicesWithoutNavBar.add("HTC One XL");
-        hasNavBar = !devicesWithoutNavBar.contains(android.os.Build.MODEL);
-        final Context ctx = VLCApplication.getAppContext();
-        final PackageManager pm = ctx != null ? ctx.getPackageManager() : null;
-        hasTsp = pm == null || pm.hasSystemFeature("android.hardware.touchscreen");
-        isAndroidTv = pm != null && pm.hasSystemFeature("android.software.leanback");
-        isChromeBook = pm != null && pm.hasSystemFeature("org.chromium.arc.device_management");
-        hasPlayServices = pm == null || hasPlayServices(pm);
-        hasPiP = AndroidUtil.isOOrLater || AndroidUtil.isNougatOrLater && isAndroidTv;
-        final TelephonyManager tm = ctx != null ? ((TelephonyManager) ctx.getSystemService(Context.TELEPHONY_SERVICE)) : null;
-        isPhone = tm == null || tm.getPhoneType() != TelephonyManager.PHONE_TYPE_NONE;
-        // hasCombBar test if device has Combined Bar : only for tablet with Honeycomb or ICS
-        hasCombBar = !AndroidDevices.isPhone && !AndroidUtil.isJellyBeanMR1OrLater;
+        hasNavBar = AndroidUtil.isICSOrLater
+                && !devicesWithoutNavBar.contains(android.os.Build.MODEL);
     }
 
     public static boolean hasExternalStorage() {
         return Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED);
     }
 
+    public static boolean hasNavBar() {
+        return hasNavBar;
+    }
+
     /**
      * hasCombBar test if device has Combined Bar : only for tablet with Honeycomb or ICS
      */
+    public static boolean hasCombBar() {
+        return (!AndroidDevices.isPhone()
+                && ((VERSION.SDK_INT >= VERSION_CODES.HONEYCOMB) &&
+                (VERSION.SDK_INT <= VERSION_CODES.JELLY_BEAN)));
+    }
 
-    public static List<String> getExternalStorageDirectories() {
+    public static boolean isPhone() {
+        TelephonyManager manager = (TelephonyManager) VLCApplication.getAppContext().getSystemService(Context.TELEPHONY_SERVICE);
+        return manager.getPhoneType() != TelephonyManager.PHONE_TYPE_NONE;
+    }
+
+    public static boolean hasTsp() {
+        return hasTsp;
+    }
+
+    public static boolean isAndroidTv() {
+        return isTv;
+    }
+
+    public static boolean showInternalStorage() {
+        return showInternalStorage;
+    }
+
+    public static ArrayList<String> getExternalStorageDirectories() {
         BufferedReader bufReader = null;
-        final List<String> list = new ArrayList<>();
+        ArrayList<String> list = new ArrayList<>();
+
+        List<String> typeWL = Arrays.asList("vfat", "exfat", "sdcardfs", "fuse", "ntfs", "fat32", "ext3", "ext4", "esdfs");
+        List<String> typeBL = Arrays.asList("tmpfs");
+        String[] mountWL = {"/mnt", "/Removable", "/storage"};
+        String[] mountBL = {
+                EXTERNAL_PUBLIC_DIRECTORY,
+                "/mnt/secure",
+                "/mnt/shell",
+                "/mnt/asec",
+                "/mnt/nand",
+                "/mnt/runtime",
+                "/mnt/obb",
+                "/mnt/media_rw/extSdCard",
+                "/mnt/media_rw/sdcard",
+                "/storage/emulated"};
+        String[] deviceWL = {
+                "/dev/block/vold",
+                "/dev/fuse",
+                "/mnt/media_rw"
+        };
+
         try {
             bufReader = new BufferedReader(new FileReader("/proc/mounts"));
             String line;
             while ((line = bufReader.readLine()) != null) {
 
-                final StringTokenizer tokens = new StringTokenizer(line, " ");
-                final String device = tokens.nextToken();
-                final String mountpoint = tokens.nextToken();
-                final String type = tokens.hasMoreTokens() ? tokens.nextToken() : null;
+                StringTokenizer tokens = new StringTokenizer(line, " ");
+                String device = tokens.nextToken();
+                String mountpoint = tokens.nextToken();
+                String type = tokens.nextToken();
 
                 // skip if already in list or if type/mountpoint is blacklisted
                 if (list.contains(mountpoint) || typeBL.contains(type) || Strings.startsWith(mountBL, mountpoint))
@@ -136,7 +157,7 @@ public class AndroidDevices {
 
                 // check that device is in whitelist, and either type or mountpoint is in a whitelist
                 if (Strings.startsWith(deviceWL, device) && (typeWL.contains(type) || Strings.startsWith(mountWL, mountpoint))) {
-                    final int position = Strings.containsName(list, FileUtils.getFileNameFromPath(mountpoint));
+                    int position = Strings.containsName(list, FileUtils.getFileNameFromPath(mountpoint));
                     if (position > -1)
                         list.remove(position);
                     list.add(mountpoint);
@@ -146,43 +167,36 @@ public class AndroidDevices {
         } finally {
             Util.close(bufReader);
         }
-        list.remove(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY);
         return list;
     }
 
     public static List<MediaWrapper> getMediaDirectoriesList() {
-        final String storages[] = AndroidDevices.getMediaDirectories();
-        final LinkedList<MediaWrapper> list = new LinkedList<>();
+        String storages[] = AndroidDevices.getMediaDirectories();
+        LinkedList<MediaWrapper> list = new LinkedList<>();
         MediaWrapper directory;
         for (String mediaDirLocation : storages) {
-            if (!(new File(mediaDirLocation).exists())) continue;
+            if (!(new File(mediaDirLocation).exists()))
+                continue;
             directory = new MediaWrapper(AndroidUtil.PathToUri(mediaDirLocation));
             directory.setType(MediaWrapper.TYPE_DIR);
             if (TextUtils.equals(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY, mediaDirLocation))
                 directory.setDisplayTitle(VLCApplication.getAppResources().getString(R.string.internal_memory));
-            else {
-                final String deviceName = FileUtils.getStorageTag(directory.getTitle());
-                if (deviceName != null) directory.setDisplayTitle(deviceName);
-            }
             list.add(directory);
         }
         return list;
     }
 
     public static String[] getMediaDirectories() {
-        return getMediaDirectories(VLCApplication.getAppContext());
-    }
-
-    public static String[] getMediaDirectories(Context ctx) {
-        final List<String> list = new ArrayList<>();
+        ArrayList<String> list = new ArrayList<String>();
         list.add(EXTERNAL_PUBLIC_DIRECTORY);
         list.addAll(getExternalStorageDirectories());
-        list.addAll(Arrays.asList(CustomDirectories.getCustomDirectories(ctx)));
+        list.addAll(Arrays.asList(CustomDirectories.getCustomDirectories()));
         return list.toArray(new String[list.size()]);
     }
 
     @TargetApi(VERSION_CODES.HONEYCOMB_MR1)
-    public static float getCenteredAxis(MotionEvent event, InputDevice device, int axis) {
+    public static float getCenteredAxis(MotionEvent event,
+                                        InputDevice device, int axis) {
         final InputDevice.MotionRange range =
                 device.getMotionRange(axis, event.getSource());
 
@@ -202,53 +216,87 @@ public class AndroidDevices {
         return 0;
     }
 
-    private static boolean isManufacturerBannedForMediastyleNotifications() {
-        if (!AndroidUtil.isMarshMallowOrLater)
-            for (String manufacturer : noMediaStyleManufacturers)
-                if (Build.MANUFACTURER.toLowerCase(Locale.getDefault()).contains(manufacturer))
-                    return true;
-        return false;
-    }
-
-    private static boolean hasPlayServices(PackageManager pm) {
+    public static boolean hasPlayServices() {
         try {
-            pm.getPackageInfo("com.google.android.gsf", PackageManager.GET_SERVICES);
+            VLCApplication.getAppContext().getPackageManager().getPackageInfo("com.google.android.gsf", PackageManager.GET_SERVICES);
             return true;
-        } catch (PackageManager.NameNotFoundException ignored) {}
+        } catch (PackageManager.NameNotFoundException e) {}
         return false;
     }
 
-    public static boolean isDex(Context ctx) {
-        if (!AndroidUtil.isNougatOrLater) return false;
-        try {
-            final Configuration config = ctx.getResources().getConfiguration();
-            final Class configClass = config.getClass();
-            return configClass.getField("SEM_DESKTOP_MODE_ENABLED").getInt(configClass)
-                    == configClass.getField("semDesktopModeEnabled").getInt(config);
-        } catch(Exception ignored) {
+    public static boolean isVPNActive() {
+        if (AndroidUtil.isLolliPopOrLater) {
+            ConnectivityManager cm = (ConnectivityManager)VLCApplication.getAppContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+
+            for (Network network : cm.getAllNetworks()) {
+                if (cm.getNetworkCapabilities(network).hasTransport(NetworkCapabilities.TRANSPORT_VPN))
+                    return true;
+            }
+            return false;
+        } else {
+            try {
+                Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+                while (networkInterfaces.hasMoreElements()) {
+                    NetworkInterface networkInterface = networkInterfaces.nextElement();
+                    String name = networkInterface.getDisplayName();
+                    if (name.startsWith("ppp") || name.startsWith("tun") || name.startsWith("tap"))
+                        return true;
+                }
+            } catch (SocketException ignored) {}
             return false;
         }
     }
 
-    public static class MediaFolders {
-        public final static File EXTERNAL_PUBLIC_MOVIES_DIRECTORY_FILE = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-        public final static File EXTERNAL_PUBLIC_MUSIC_DIRECTORY_FILE = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
-        public final static File EXTERNAL_PUBLIC_PODCAST_DIRECTORY_FILE = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PODCASTS);
-        public final static File EXTERNAL_PUBLIC_DOWNLOAD_DIRECTORY_FILE = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-        public final static File WHATSAPP_VIDEOS_FILE = new File(EXTERNAL_PUBLIC_DIRECTORY+"/WhatsApp/Media/WhatsApp Video/");
-
-        public final static Uri EXTERNAL_PUBLIC_MOVIES_DIRECTORY_URI = getFolderUri(EXTERNAL_PUBLIC_MOVIES_DIRECTORY_FILE);
-        public final static Uri EXTERNAL_PUBLIC_MUSIC_DIRECTORY_URI = getFolderUri(EXTERNAL_PUBLIC_MUSIC_DIRECTORY_FILE);
-        public final static Uri EXTERNAL_PUBLIC_PODCAST_DIRECTORY_URI = getFolderUri(EXTERNAL_PUBLIC_PODCAST_DIRECTORY_FILE);
-        public final static Uri EXTERNAL_PUBLIC_DOWNLOAD_DIRECTORY_URI = getFolderUri(EXTERNAL_PUBLIC_DOWNLOAD_DIRECTORY_FILE);
-        public final static Uri WHATSAPP_VIDEOS_FILE_URI = getFolderUri(WHATSAPP_VIDEOS_FILE);
-
-        private static Uri getFolderUri(File file) {
-            try {
-                return Uri.parse("file://"+ file.getCanonicalPath());
-            } catch (IOException ignored) {
-                return Uri.parse("file://"+ file.getPath());
+    public static boolean hasLANConnection() {
+        boolean networkEnabled = false;
+        ConnectivityManager connectivity = (ConnectivityManager) (VLCApplication.getAppContext().getSystemService(Context.CONNECTIVITY_SERVICE));
+        if (connectivity != null) {
+            NetworkInfo networkInfo = connectivity.getActiveNetworkInfo();
+            if (networkInfo != null && networkInfo.isConnected() &&
+                    (networkInfo.getType() != ConnectivityManager.TYPE_MOBILE)) {
+                networkEnabled = true;
             }
         }
+        return networkEnabled;
+    }
+
+    public static boolean hasConnection() {
+        boolean networkEnabled = false;
+        ConnectivityManager connectivity = (ConnectivityManager) (VLCApplication.getAppContext().getSystemService(Context.CONNECTIVITY_SERVICE));
+        if (connectivity != null) {
+            NetworkInfo networkInfo = connectivity.getActiveNetworkInfo();
+            if (networkInfo != null && networkInfo.isConnected()) {
+                networkEnabled = true;
+            }
+        }
+        return networkEnabled;
+    }
+
+    public static boolean hasMobileConnection() {
+        boolean networkEnabled = false;
+        ConnectivityManager connectivity = (ConnectivityManager) (VLCApplication.getAppContext().getSystemService(Context.CONNECTIVITY_SERVICE));
+        if (connectivity != null) {
+            NetworkInfo networkInfo = connectivity.getActiveNetworkInfo();
+            if (networkInfo != null && networkInfo.isConnected() &&
+                    (networkInfo.getType() == ConnectivityManager.TYPE_MOBILE)) {
+                networkEnabled = true;
+            }
+        }
+        return networkEnabled;
+    }
+
+    public static void setRemoteControlReceiverEnabled(boolean enabled) {
+        VLCApplication.getAppContext().getPackageManager().setComponentEnabledSetting(
+                new ComponentName(VLCApplication.getAppContext(), RemoteControlClientReceiver.class),
+                enabled ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED :
+                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP);
+    }
+
+    private static boolean isManufacturerBannedForMediastyleNotifications() {
+        for (String manufacturer : noMediaStyleManufacturers)
+            if (Build.MANUFACTURER.toLowerCase(Locale.getDefault()).contains(manufacturer))
+                return true;
+        return false;
     }
 }

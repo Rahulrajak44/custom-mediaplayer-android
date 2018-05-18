@@ -37,14 +37,14 @@ public class FilePickerActivity extends AppCompatActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.file_picker_activity);
-        final FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+        FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
         ft.replace(R.id.fragment_placeholder, new FilePickerFragment(), "picker");
         ft.commit();
     }
 
     @Override
     public void onBackPressed() {
-        final FilePickerFragment fpf = ((FilePickerFragment) getSupportFragmentManager().findFragmentById(R.id.fragment_placeholder));
+        FilePickerFragment fpf = ((FilePickerFragment) getSupportFragmentManager().findFragmentById(R.id.fragment_placeholder));
         if (fpf.isRootDirectory())
             finish();
         else if (getSupportFragmentManager().getBackStackEntryCount() > 0)
@@ -55,5 +55,6 @@ public class FilePickerActivity extends AppCompatActivity {
 
     public void onHomeClick(View v) {
         ((FilePickerFragment) getSupportFragmentManager().findFragmentById(R.id.fragment_placeholder)).browseRoot();
+        setTitle(R.string.directories);
     }
 }

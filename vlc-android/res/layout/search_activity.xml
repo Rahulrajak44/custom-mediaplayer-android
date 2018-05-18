@@ -23,7 +23,7 @@
             <ImageView
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:src="@drawable/ic_arrow_back"
+                android:src="@drawable/ic_arrow_back_white_24dp"
                 android:layout_gravity="center_vertical"
                 android:layout_marginEnd="10dp"
                 android:scaleType="center"
@@ -47,7 +47,7 @@
             <ImageView
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:src="@drawable/ic_clear_orange"
+                android:src="@drawable/ic_close_normal_w"
                 android:layout_gravity="center_vertical"
                 android:scaleType="center"
                 android:onClick="@{handler::onClean}" />
@@ -69,11 +69,13 @@
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="10dp"
                     android:text="@string/albums"
-                    android:textAppearance="@style/Result.Title"
+                    android:textAllCaps="true"
                     android:visibility="@{searchAggregate.albums.length == 0 ? View.GONE : View.VISIBLE}"/>
                 <org.videolan.vlc.gui.view.ContextMenuRecyclerView
                     android:id="@+id/albums_results"
                     style="@style/Result.List"
+                    android:overScrollMode="never"
+
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="?attr/background_default"
@@ -82,7 +84,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="10dp"
-                    android:textAppearance="@style/Result.Title"
+                    android:textAllCaps="true"
+
                     android:text="@string/artists"
                     android:visibility="@{searchAggregate.artists.length == 0 ? View.GONE : View.VISIBLE}"/>
                 <org.videolan.vlc.gui.view.ContextMenuRecyclerView
@@ -96,7 +99,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="10dp"
-                    android:textAppearance="@style/Result.Title"
+                    android:textAllCaps="true"
+
                     android:text="@string/genres"
                     android:visibility="@{searchAggregate.genres.length == 0 ? View.GONE : View.VISIBLE}"/>
                 <org.videolan.vlc.gui.view.ContextMenuRecyclerView
@@ -110,7 +114,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="10dp"
-                    android:textAppearance="@style/Result.Title"
+                    android:textAllCaps="true"
+
                     android:text="@string/playlists"
                     android:visibility="@{searchAggregate.playlists.length == 0 ? View.GONE : View.VISIBLE}"/>
                 <org.videolan.vlc.gui.view.ContextMenuRecyclerView
@@ -124,7 +129,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="10dp"
-                    android:textAppearance="@style/Result.Title"
+                    android:textAllCaps="true"
+
                     android:text="@string/episodes"
                     android:visibility="@{searchAggregate.mediaSearchAggregate.episodes.length == 0 ? View.GONE : View.VISIBLE}"/>
                 <org.videolan.vlc.gui.view.ContextMenuRecyclerView
@@ -138,7 +144,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="10dp"
-                    android:textAppearance="@style/Result.Title"
+                    android:textAllCaps="true"
+
                     android:text="@string/movies"
                     android:visibility="@{searchAggregate.mediaSearchAggregate.movies.length == 0 ? View.GONE : View.VISIBLE}"/>
                 <org.videolan.vlc.gui.view.ContextMenuRecyclerView
@@ -152,7 +159,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="10dp"
-                    android:textAppearance="@style/Result.Title"
+                    android:textAllCaps="true"
+
                     android:text="@string/videos"
                     android:visibility="@{searchAggregate.mediaSearchAggregate.others.length == 0 ? View.GONE : View.VISIBLE}"/>
                 <org.videolan.vlc.gui.view.ContextMenuRecyclerView
@@ -166,7 +174,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="10dp"
-                    android:textAppearance="@style/Result.Title"
+                    android:textAllCaps="true"
+
                     android:text="@string/songs"
                     android:visibility="@{searchAggregate.mediaSearchAggregate.tracks.length == 0 ? View.GONE : View.VISIBLE}"/>
                 <org.videolan.vlc.gui.view.ContextMenuRecyclerView
@@ -180,10 +189,11 @@
         </ScrollView>
 
         <TextView
+            android:id="@+id/no_media"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="center"
-            android:textAppearance="@style/Result.Title"
+            android:textAllCaps="true"
             android:visibility="@{searchAggregate.isEmpty ? View.VISIBLE : View.GONE}"
             android:text="@string/search_no_result"/>
     </LinearLayout>

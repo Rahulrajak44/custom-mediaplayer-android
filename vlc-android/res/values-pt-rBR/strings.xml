@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Main VLC Interface -->
+<resources>
+    <!-- Main %1$s Interface -->
     <string name="ok">OK</string>
     <string name="cancel">Cancelar</string>
     <string name="other">Outro</string>
@@ -21,8 +21,8 @@
     <string name="play_from_start">Reproduzir do início</string>
     <string name="play_as_audio">Reproduzir como áudio</string>
     <string name="play_as_video">Reproduzir como vídeo</string>
-    <string name="play_pip_title">Reproduzir vídeos em modo de mini tela</string>
     <string name="play_as_audio_background">Reproduzir vídeos em segundo plano</string>
+    <string name="play_as_audio_background_summary">Continua a reprodução do vídeo em segundo plano quando a tela do dispositivo for desligada ou a tecla HOME for pressionada.</string>
     <string name="append">Adicionar</string>
     <string name="insert_next">Inserir como próximo</string>
     <string name="play_all">Reproduzir tudo</string>
@@ -39,7 +39,6 @@
     <string name="ringtone_error">Ocorreu um erro ao definir o toque.</string>
     <string name="pause">Pausar</string>
     <string name="not_show_again">Não exibir esta mensagem novamente.</string>
-    <string name="info_title">VLC</string>
     <string name="unknown_artist">Artista Desconhecido</string>
     <string name="unknown_album">Álbum Desconhecido</string>
     <string name="unknown_genre">Gênero Desconhecido</string>
@@ -50,7 +49,6 @@
     </plurals>
     <string name="artists">Artistas</string>
     <string name="albums">Álbuns</string>
-    <string name="tracks">Trilhas</string>
     <plurals name="albums_quantity">
         <item quantity="one">1 álbum</item>
         <item quantity="other">%d álbuns</item>
@@ -60,7 +58,7 @@
         <item quantity="other">%d sub pastas</item>
     </plurals>
     <plurals name="mediafiles_quantity">
-        <item quantity="one">%d arquivo de mídia</item>
+        <item quantity="one">$d arquivo de mídia</item>
         <item quantity="other">%d arquivos de mídia</item>
     </plurals>
     <plurals name="videos_quantity">
@@ -161,11 +159,11 @@
     <string name="open_mrl">Abrir MRL</string>
     <string name="open_mrl_dialog_title">Abrir fluxo de rede</string>
     <string name="open_mrl_dialog_msg">Digite o MRL: Ex.: http://, mms:// ou rtsp://</string>
-    <string name="error_not_compatible">Desculpe, não há suporte do VLC para Android™ para o seu dispositivo.</string>
-    <string name="error_problem">Desculpe, ocorreu um problema durante a carga e o VLC para Android™ foi fechado.</string>
+    <string name="error_not_compatible">Desculpe, não há suporte do %1$s para Android™ para o seu dispositivo.</string>
+    <string name="error_problem">Desculpe, ocorreu um problema durante a carga e o %1$s para Android™ foi fechado.</string>
     <string name="error_message_is">A mensagem de erro é (por favor, mencione-a quando estiver depurando):\n</string>
     <string name="encountered_error_title">Erro de reprodução</string>
-    <string name="encountered_error_message">O VLC encontrou um erro nesta mídia.\nPor favor, tente atualizar a biblioteca de mídias.</string>
+    <string name="encountered_error_message">O %1$s encontrou um erro nesta mídia.\nPor favor, tente atualizar a biblioteca de mídias.</string>
     <string name="invalid_location">Não é possível reproduzir na área %1$s.</string>
     <string name="search">Pesquisar</string>
     <string name="search_history">Histórico de pesquisas</string>
@@ -192,13 +190,13 @@
     <string name="show_playlist">Exibir a lista de reprodução</string>
     <string name="hold_to_stop">Segure para parar</string>
     <!-- About -->
-    <string name="app_name_full">VLC para Android™</string>
+    <string name="app_name_full">%1$s para Android™</string>
     <string name="licence">Licença</string>
     <string name="revision">Revisão</string>
     <string name="about">Sobre</string>
-    <string name="about_text">O VLC para Android™ é uma versão do Reprodutor de Mídias VLC, o popular reprodutor de mídias livre. A versão Android™ lê a maioria dos arquivos e fluxos de rede.</string>
-    <string name="compiled_by">Esta versão do VLC foi compilada por:</string>
-    <string name="vlc_authors">Autores do VLC.</string>
+    <string name="about_text">O %1$s para Android™ é uma versão do Reprodutor de Mídias %1$s, o popular reprodutor de mídias livre. A versão Android™ lê a maioria dos arquivos e fluxos de rede.</string>
+    <string name="compiled_by">Esta versão do %1$s foi compilada por:</string>
+    <string name="vlc_authors">Autores do %1$s.</string>
     <!-- Preferences -->
     <string name="preferences">Preferências</string>
     <string name="general_prefs_category">Geral</string>
@@ -246,23 +244,14 @@
     <string name="video_min_group_length_long">Grande número de letras (9)</string>
     <string name="force_list_portrait">Desativar a grade no modo retrato</string>
     <string name="force_list_portrait_summary">Exibir vídeos em lista em vez de grade, no modo retrato</string>
-    <string name="force_play_all_summary">Reproduz todos os vídeos, iniciando pelo que você clicar.</string>
-    <string name="force_play_all_title">Modo de lista de reprodução de vídeos</string>
     <string name="save_brightness_summary">Salvar o nível de brilho no reprodutor de vídeos</string>
     <string name="save_brightness_title">Salvar o nível de brilho para vídeo</string>
-    <string name="save_audiodelay_summary">Salvar o atraso individual de áudio para cada vídeo</string>
-    <string name="save_audiodelay_title">Salvar o atraso de áudio</string>
     <string name="enable_brightness_gesture_title">Gesto de brilho</string>
     <string name="enable_brightness_gesture_summary">Controla o brilho por gestos durante a reprodução de vídeo</string>
     <string name="enable_volume_gesture_title">Gesto de volume</string>
     <string name="enable_volume_gesture_summary">Controla o volume por gesto durante a reprodução</string>
     <string name="enable_seek_buttons">Habilitar os botões de deslocamento</string>
     <string name="enable_seek_buttons_summary">Exibir os botões de avançar e retroceder na interface de vídeo</string>
-    <string name="enable_double_tap_seek_title">Toque duplo para pesquisar</string>
-    <string name="enable_double_tap_seek_summary">Toque duplo nos cantos da tela para pesquisar por 10 segundos</string>
-    <string name="popup_keepscreen_title">Manter a tela ativa no modo Pop-Up</string>
-    <string name="browser_show_hidden_files_title">Exibir arquivos ocultos</string>
-    <string name="browser_show_hidden_files_summary">Exibir arquivos ocultos em navegadores</string>
     <string name="subtitles_prefs_category">Legendas</string>
     <string name="subtitles_size_title">Tamanho da Legenda</string>
     <string name="subtitles_size_small">Pequeno</string>
@@ -290,7 +279,7 @@
     <string name="enable_steal_remote_control">Controle remoto exclusivo para o fone</string>
     <string name="enable_steal_remote_control_summary">Evite conflitos tomando o acesso ao controle remoto. Isso evita a discagem por duplo-toque dos telefones HTC.</string>
     <string name="aout">Saída de áudio</string>
-    <string name="aout_summary">Alterar o método que o VLC usa para reproduzir áudio.</string>
+    <string name="aout_summary">Alterar o método que o %1$s usa para reproduzir áudio.</string>
     <string name="controls_prefs_category">Controles</string>
     <string name="performance_prefs_category">Desempenho</string>
     <string name="chroma_format">Impor um formato cromático</string>
@@ -314,7 +303,7 @@
     <string name="media_db_cleared">Banco de mídias limpo!</string>
     <string name="set_locale">Definir local</string>
     <string name="set_locale_detail">Deixe em branco para redefinir</string>
-    <string name="set_locale_popup">Fecha e reinicia o VLC para que as alterações tenham efeito.</string>
+    <string name="set_locale_popup">Fecha e reinicia o %1$s para que as alterações tenham efeito.</string>
     <string name="network_caching">Valor de memória para rede</string>
     <string name="network_caching_summary">A quantidade de tempo para armazenar em memória (em ms). Não funciona com decodificação por hardware. Deixe vazio para restaurar a configuração.</string>
     <string name="resume_playback_title">Retomar a reprodução após uma chamada</string>
@@ -326,16 +315,16 @@
     <string name="start_logging">Iniciar o registro</string>
     <string name="stop_logging">Parar o registro</string>
     <string name="clear_log">Limpar o registro</string>
-    <string name="log_service_title">Gravação de registros do VLC</string>
+    <string name="log_service_title">Gravação de registros do %1$s</string>
     <string name="log_service_text">Abrir a console de registros</string>
     <string name="copy_to_clipboard">Copiar para a área de transferência</string>
     <string name="copied_to_clipboard">Registro copiado para a área de transferência</string>
     <string name="dump_logcat">Despejar os registros do logcat</string>
     <string name="dump_logcat_success">O logcat despejou os registros com sucesso em %1$s!</string>
     <string name="dump_logcat_failure">Falha ao despejar os registros do logcat.</string>
-    <string name="serious_crash">Infelizmente ocorreu um erro severo e o VLC precisou ser fechado.</string>
-    <string name="help_us_send_log">Ajude-nos a melhorar o VLC enviando o seguinte registro de problemas:</string>
-    <string name="restart_vlc">Reiniciar o VLC</string>
+    <string name="serious_crash">Infelizmente ocorreu um erro severo e o %1$s precisou ser fechado.</string>
+    <string name="help_us_send_log">Ajude-nos a melhorar o %1$s enviando o seguinte registro de problemas:</string>
+    <string name="restart_vlc">Reiniciar o %1$s</string>
     <string name="send_log">Enviar o registro</string>
     <string name="sending_log">Enviando o registro...</string>
     <string name="drawer_open">Abrir o compositor de navegação</string>
@@ -366,8 +355,6 @@
     <string name="player_touch_disable_brightness">Desabilitar o controle de brilho</string>
     <string name="player_touch_disable_all">Desabilitar todos os controles por toque</string>
     <string name="tv_ui_title">Interface do Android TV</string>
-    <string name="medialibrary">Biblioteca de mídias</string>
-    <string name="medialibrary_directories">Pastas da biblioteca de mídias</string>
     <!--Accessibility-->
     <string name="more_actions">Mais Ações</string>
     <string name="move">Mover</string>
@@ -377,25 +364,24 @@
     <string name="no_subs_found">Nenhuma legenda nesta pasta</string>
     <string name="music_now_playing">Reproduzindo</string>
     <!--Widget-->
-    <string name="widget_name_w">Dispositivo VLC Branco</string>
-    <string name="widget_name_b">Dispositivo VLC Preto</string>
-    <string name="allow_storage_access_title">Permitir que o VLC acesse arquivos de áudio e vídeo</string>
-    <string name="allow_storage_access_description">O VLC precisa que você conceda esta permissão para acessar os arquivos de mídia deste dispositivo.</string>
-    <string name="allow_settings_access_ringtone_title">Permitir que o VLC defina o toque</string>
-    <string name="allow_settings_access_ringtone_description">O VLC precisa que você conceda esta permissão para definir esta música como toque.</string>
-    <string name="allow_settings_access_brightness_title">Permitir que o VLC defina o brilho</string>
-    <string name="allow_settings_access_brightness_description">O VLC precisa que você conceda esta permissão para definir o brilho</string>
-    <string name="allow_draw_overlays_title">Permitir que o VLC se sobreponha a outros aplicativos</string>
-    <string name="allow_sdraw_overlays_description">O VLC precisa de sua permissão para exibir seu vídeo em uma janela sobre outros aplicativos.</string>
+    <string name="widget_name_w">Dispositivo %1$s Branco</string>
+    <string name="widget_name_b">Dispositivo %1$s Preto</string>
+    <string name="allow_storage_access_title">Permitir que o %1$s acesse arquivos de áudio e vídeo</string>
+    <string name="allow_storage_access_description">O %1$s precisa que você conceda esta permissão para acessar os arquivos de mídia deste dispositivo.</string>
+    <string name="allow_settings_access_ringtone_title">Permitir que o %1$s defina o toque</string>
+    <string name="allow_settings_access_ringtone_description">O %1$s precisa que você conceda esta permissão para definir esta música como toque.</string>
+    <string name="allow_settings_access_brightness_title">Permitir que o %1$s defina o brilho</string>
+    <string name="allow_settings_access_brightness_description">O %1$s precisa que você conceda esta permissão para definir o brilho</string>
+    <string name="allow_draw_overlays_title">Permitir que o %1$s se sobreponha a outros aplicativos</string>
+    <string name="allow_sdraw_overlays_description">O %1$s precisa de sua permissão para exibir seu vídeo em uma janela sobre outros aplicativos.</string>
     <string name="permission_ask_again">Conceder permissão</string>
-    <string name="exit_app">Fechar o VLC</string>
+    <string name="exit_app">Fechar o %1$s</string>
     <!--fast scroller-->
     <!--Plugins-->
     <string name="plugins">Complementos</string>
     <string name="download_on_device">Baixar</string>
     <string name="extension_empty">Nenhum item para exibir. Verifique as configurações de extensão para obter algumas.</string>
     <string name="opengl_title">Uso do OpenGL ES2</string>
-    <string name="opengl_summary">Por padrão, o OpenGL ES2 é usado para decodificação por software e por hardware, quando necessário (vídeos em 360°).</string>
     <string name="opengl_automatic">Automático</string>
     <string name="opengl_on">Impor em Ligado</string>
     <string name="opengl_off">Import em Desligado</string>
@@ -429,12 +415,12 @@
     <string name="clear_playback_history">Limpar histórico de reprodução</string>
     <string name="various_artists">Vários Artistas</string>
     <string name="ml_scanning">Procurando arquivos de mídia</string>
+    <string name="ml_discovering">Descobrir</string>
     <string name="resume">Retomar</string>
     <string name="length">Duração</string>
     <string name="tv_settings_hint">Pressione prolongadamente o botão OK para marcar/desmarcar pastas</string>
     <string name="ml_external_storage_title">Um armazenamento externo foi detectado</string>
-    <string name="ml_external_storage_msg">Deseja que o VLC adicione o dispositivo %1$s à sua biblioteca de mídias?</string>
+    <string name="ml_external_storage_msg">Deseja que o %1$s adicione o dispositivo %1$s à sua biblioteca de mídias?</string>
     <string name="last_added_media">último adicionado</string>
     <string name="no">Não</string>
-    <string name="loading_medialibrary">Carregando Biblioteca de Mídias</string>
 </resources>

@@ -2,7 +2,7 @@
 
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     android:title="@string/developer_prefs_category" >
-    <CheckBoxPreference
+    <org.videolan.vlc.gui.preferences.CustomCheckBoxPreference
         android:defaultValue="true"
         android:key="enable_verbose_mode"
         android:summary="@string/enable_verbose_mode_summary"

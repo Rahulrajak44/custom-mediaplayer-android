@@ -62,6 +62,11 @@ public class ShallowVideoPlayer extends VideoPlayerActivity {
     }
 
     @Override
+    public boolean onLongClick(View v) {
+        return true;
+    }
+
+    @Override
     public void onClick(View v) {
     }
 }

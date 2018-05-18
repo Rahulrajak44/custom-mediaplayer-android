@@ -16,9 +16,8 @@ checkfail()
 # ARGUMENTS #
 #############
 
-MEDIALIBRARY_HASH=30c7bf0
+MEDIALIBRARY_HASH=e9565223
 
-BUILD_ML=1
 RELEASE=0
 ASAN=0
 while [ $# -gt 0 ]; do
@@ -37,9 +36,6 @@ while [ $# -gt 0 ]; do
             ;;
         --asan)
             ASAN=1
-            ;;
-        --no-ml)
-            BUILD_ML=0
             ;;
         release|--release)
             RELEASE=1
@@ -69,6 +65,7 @@ fi
 
 VLC_BOOTSTRAP_ARGS="\
     --disable-disc \
+    --disable-sout \
     --enable-dvdread \
     --enable-dvdnav \
     --disable-dca \
@@ -107,11 +104,6 @@ VLC_BOOTSTRAP_ARGS="\
     --disable-vncclient \
     --disable-vnc \
     --enable-jpeg \
-    --enable-libplacebo \
-    --enable-ad-clauses \
-    --disable-srt \
-    --enable-vpx \
-    --disable-x265 \
 "
 
 ###########################
@@ -172,9 +164,10 @@ VLC_CONFIGURE_ARGS="\
     --enable-gles2 \
     --disable-goom \
     --disable-projectm \
-    --enable-sout \
+    --disable-sout \
     --enable-vorbis \
     --disable-faad \
+    --disable-x264 \
     --disable-schroedinger \
     --disable-vncclient \
     --disable-vnc \
@@ -283,17 +276,14 @@ VLC_CONTRIB="$VLC_SRC_DIR/contrib/$TARGET_TUPLE"
 # try to detect NDK version
 REL=$(grep -o '^Pkg.Revision.*[0-9]*.*' $ANDROID_NDK/source.properties |cut -d " " -f 3 | cut -d "." -f 1)
 
-# NDK 15 and after drops support for old android platforms (bellow
-# ANDROID_API=14) but these platforms are still supported by VLC 3.0.
-# TODO: Switch to NDK 15 when we drop support for old android plaftorms (for VLC 4.0)
-if [ "$REL" -eq 14 ]; then
+if [ "$REL" -ge 13 ]; then
     if [ "${HAVE_64}" = 1 ];then
         ANDROID_API=21
     else
-        ANDROID_API=9
+        ANDROID_API=14
     fi
 else
-    echo "NDK v14 needed, cf. https://developer.android.com/ndk/downloads/older_releases.html#ndk-14-downloads"
+    echo "You need the NDKv13 or later"
     exit 1
 fi
 
@@ -307,12 +297,12 @@ if [ "`cat \"${NDK_TOOLCHAIN_PROPS}\" 2>/dev/null`" != "`cat \"${ANDROID_NDK}/so
      NDK_FORCE_ARG="--force"
 fi
 
-$ANDROID_NDK/build/tools/make_standalone_toolchain.py \
+$ANDROID_NDK/build/tools/make_standalone_toolchain.py --verbose \
     --arch ${PLATFORM_SHORT_ARCH} \
     --api ${ANDROID_API} \
     --stl libc++ \
     ${NDK_FORCE_ARG} \
-    --install-dir ${NDK_TOOLCHAIN_DIR} 2> /dev/null
+    --install-dir ${NDK_TOOLCHAIN_DIR} 
 if [ ! -d ${NDK_TOOLCHAIN_PATH} ];
 then
     echo "make_standalone_toolchain.py failed"
@@ -376,14 +366,11 @@ VLC_CXXFLAGS="-std=gnu++11"
 if [ "$NO_OPTIM" = "1" ];
 then
      VLC_CFLAGS="${VLC_CFLAGS} -g -O0"
-     VLC_CXXFLAGS="${VLC_CXXFLAGS} -g -O0"
 else
      VLC_CFLAGS="${VLC_CFLAGS} -g -O2"
-     VLC_CXXFLAGS="${VLC_CXXFLAGS} -g -O2"
 fi
 
 VLC_CFLAGS="${VLC_CFLAGS} -fstrict-aliasing -funsafe-math-optimizations"
-VLC_CXXFLAGS="${VLC_CXXFLAGS} -fstrict-aliasing -funsafe-math-optimizations"
 
 # Setup CFLAGS per ABI
 if [ "${ANDROID_ABI}" = "armeabi-v7a" ] ; then
@@ -417,8 +404,13 @@ NDK_LIB_DIR="${NDK_TOOLCHAIN_DIR}/${TARGET_TUPLE}/lib"
 if [ "${PLATFORM_SHORT_ARCH}" = "x86_64" -o "${PLATFORM_SHORT_ARCH}" = "mips64" ];then
     NDK_LIB_DIR="${NDK_LIB_DIR}64"
 fi
+NDK_LIB_UNWIND=""
+if [ "${ANDROID_ABI}" = "armeabi-v7a" ];then
+    NDK_LIB_DIR="${NDK_LIB_DIR}/armv7-a"
+    NDK_LIB_UNWIND="-lunwind"
+fi
 
-EXTRA_LDFLAGS="${EXTRA_LDFLAGS} -L${NDK_LIB_DIR} -lc++abi -lc++_static"
+EXTRA_LDFLAGS="${EXTRA_LDFLAGS} -L${NDK_LIB_DIR} -lc++abi ${NDK_LIB_UNWIND}"
 VLC_LDFLAGS="${EXTRA_LDFLAGS}"
 
 # Release or not?
@@ -433,7 +425,7 @@ fi
 
 if [ "${ASAN}" = 1 ];then
     VLC_CFLAGS="${VLC_CFLAGS} -O0 -fno-omit-frame-pointer -fsanitize=address"
-    VLC_CXXFLAGS="${VLC_CXXFLAGS} -O0 -fno-omit-frame-pointer -fsanitize=address"
+    VLC_CXXFLAGS="${VLC_CXXLAGS} -O0 -fno-omit-frame-pointer -fsanitize=address"
     VLC_LDFLAGS="${VLC_LDFLAGS} -ldl -fsanitize=address"
     # ugly, sorry
     if [ "${ANDROID_API}" = "9" ];then
@@ -454,7 +446,6 @@ fi
 
 echo "EXTRA_CFLAGS:      ${EXTRA_CFLAGS}"
 echo "VLC_CFLAGS:        ${VLC_CFLAGS}"
-echo "VLC_CXXFLAGS:      ${VLC_CXXFLAGS}"
 
 cd vlc
 
@@ -710,11 +701,48 @@ if [ "${CHROME_OS}" != "1" ];then
     LIBANW_LIBS="$LIBANW_LIBS libanw.21"
 fi
 
+echo "Building NDK"
+
+if [ $ON_WINDOWS -eq 1 ]; then
+    OSCMD=.cmd
+fi
+
+$ANDROID_NDK/ndk-build$OSCMD -C libvlc \
+    APP_STL="c++_shared" \
+    LOCAL_CPP_FEATURES="rtti exceptions" \
+    VLC_SRC_DIR="$VLC_SRC_DIR" \
+    VLC_BUILD_DIR="$VLC_SRC_DIR/$VLC_BUILD_DIR" \
+    VLC_CONTRIB="$VLC_CONTRIB" \
+    VLC_CONTRIB_LDFLAGS="$VLC_CONTRIB_LDFLAGS" \
+    VLC_MODULES="$VLC_MODULES" \
+    VLC_LDFLAGS="$VLC_LDFLAGS" \
+    APP_BUILD_SCRIPT=jni/Android.mk \
+    APP_PLATFORM=android-${ANDROID_API} \
+    APP_ABI=${ANDROID_ABI} \
+    TARGET_TUPLE=$TARGET_TUPLE \
+    NDK_PROJECT_PATH=jni \
+    NDK_TOOLCHAIN_VERSION=clang \
+    NDK_DEBUG=${NDK_DEBUG}
+
+checkfail "ndk-build failed for libvlc"
+
+$ANDROID_NDK/ndk-build$OSCMD -C libvlc \
+    VLC_SRC_DIR="$VLC_SRC_DIR" \
+    ANDROID_SYS_HEADERS="$ANDROID_SYS_HEADERS" \
+    LIBIOMX_LIBS="$LIBIOMX_LIBS" \
+    LIBANW_LIBS="$LIBANW_LIBS" \
+    APP_BUILD_SCRIPT=private_libs/Android.mk \
+    APP_PLATFORM=android-${ANDROID_API} \
+    APP_ABI=${ANDROID_ABI} \
+    TARGET_TUPLE=$TARGET_TUPLE \
+    NDK_PROJECT_PATH=private_libs \
+    NDK_TOOLCHAIN_VERSION=clang
+
+checkfail "ndk-build failed for private libs"
+
 ################
 # MEDIALIBRARY #
 ################
-
-if [ ${BUILD_ML} = "1" ];then
 
 if [ ! -d "${SRC_DIR}/medialibrary" ]; then
     mkdir "${SRC_DIR}/medialibrary"
@@ -727,8 +755,8 @@ fi
 MEDIALIBRARY_MODULE_DIR=${SRC_DIR}/medialibrary
 MEDIALIBRARY_BUILD_DIR=${MEDIALIBRARY_MODULE_DIR}/medialibrary
 OUT_LIB_DIR=$MEDIALIBRARY_MODULE_DIR/jni/libs/${ANDROID_ABI}
-SQLITE_RELEASE="sqlite-autoconf-3180200"
-SQLITE_SHA1="47f3cb34d6919e1162ed85264917c9e42a455639"
+SQLITE_RELEASE="sqlite-autoconf-3180000"
+SQLITE_SHA1="74559194e1dd9b9d577cac001c0e9d370856671b"
 
 if [ ! -d "${MEDIALIBRARY_MODULE_DIR}/${SQLITE_RELEASE}" ]; then
     echo -e "\e[1m\e[32msqlite source not found, downloading\e[0m"
@@ -773,8 +801,9 @@ if [ ! -d "${MEDIALIBRARY_MODULE_DIR}/medialibrary" ]; then
     echo -e "\e[1m\e[32mmedialibrary source not found, cloning\e[0m"
     git clone http://code.videolan.org/videolan/medialibrary.git "${SRC_DIR}/medialibrary/medialibrary"
     checkfail "medialibrary source: git clone failed"
-    cd ${MEDIALIBRARY_MODULE_DIR}/medialibrary
+    cd ${SRC_DIR}/medialibrary/medialibrary
     git submodule update --init libvlcpp
+    cd -
 else
     cd ${MEDIALIBRARY_MODULE_DIR}/medialibrary
     if ! git cat-file -e ${MEDIALIBRARY_HASH}; then
@@ -782,11 +811,9 @@ else
       rm -rf ${MEDIALIBRARY_MODULE_DIR}/jni/libs
       rm -rf ${MEDIALIBRARY_MODULE_DIR}/jni/obj
     fi
+    cd ${SRC_DIR}
 fi
-if [ "$RELEASE" = 1 ]; then
-    git reset --hard ${MEDIALIBRARY_HASH}
-fi
-cd ${SRC_DIR}
+
 echo -e "\e[1m\e[36mCFLAGS:            ${CFLAGS}\e[0m"
 echo -e "\e[1m\e[36mEXTRA_CFLAGS:      ${EXTRA_CFLAGS}\e[0m"
 
@@ -813,15 +840,11 @@ if [ ! -d "build-android-$ANDROID_ABI/" ]; then
 fi;
 cd "build-android-$ANDROID_ABI/";
 
-if [ "$RELEASE" = 1 ]; then
-    MEDIALIBRARY_MODE=--disable-debug
-fi
 if [ ! -e ./config.h -o "$RELEASE" = 1 ]; then
 ../bootstrap
 ../configure \
     --host=$TARGET_TUPLE \
     --disable-shared \
-    ${MEDIALIBRARY_MODE} \
     CFLAGS="${VLC_CFLAGS} ${EXTRA_CFLAGS}" \
     CXXFLAGS="${VLC_CXXFLAGS} ${EXTRA_CFLAGS} ${EXTRA_CXXFLAGS}" \
     CC="clang" \
@@ -849,68 +872,47 @@ checkfail "medialibrary: make failed"
 
 cd ${SRC_DIR}
 
-MEDIALIBRARY_LDLIBS="-L${MEDIALIBRARY_BUILD_DIR}/build-android-$ANDROID_ABI/.libs -lmedialibrary \
+echo -e "ndk-build medialibrary"
+
+MEDIALIBRARY_LDLIBS="-L$SRC_DIR/libvlc/jni/libs/$ANDROID_ABI -lvlc \
+-L${MEDIALIBRARY_BUILD_DIR}/build-android-$ANDROID_ABI/.libs -lmedialibrary \
 -L$SRC_DIR/vlc/contrib/contrib-android-$TARGET_TUPLE/jpeg/.libs -ljpeg \
--L$MEDIALIBRARY_MODULE_DIR/$SQLITE_RELEASE/build-$ANDROID_ABI/.libs -lsqlite3"
+-L$MEDIALIBRARY_MODULE_DIR/$SQLITE_RELEASE/build-$ANDROID_ABI/.libs -lsqlite3 \
+-L${NDK_LIB_DIR} -lc++abi ${NDK_LIB_UNWIND}"
 
-if [ $ON_WINDOWS -eq 1 ]; then
-    OSCMD=.cmd
-fi
-
-###########
-# LINKING #
-###########
-
-fi # ${BUILD_ML} = "1"
-
-echo -e "ndk-build vlc"
-
-$ANDROID_NDK/ndk-build$OSCMD -C libvlc \
-    APP_STL="c++_static" \
-    APP_CPPFLAGS="-frtti -fexceptions" \
-    VLC_SRC_DIR="$VLC_SRC_DIR" \
-    VLC_BUILD_DIR="$VLC_SRC_DIR/$VLC_BUILD_DIR" \
-    VLC_CONTRIB="$VLC_CONTRIB" \
-    VLC_CONTRIB_LDFLAGS="$VLC_CONTRIB_LDFLAGS" \
-    VLC_MODULES="$VLC_MODULES" \
-    VLC_LDFLAGS="$VLC_LDFLAGS -latomic" \
-    MEDIALIBRARY_LDLIBS="${MEDIALIBRARY_LDLIBS}" \
-    MEDIALIBRARY_INCLUDE_DIR=${MEDIALIBRARY_BUILD_DIR}/include \
+$ANDROID_NDK/ndk-build -C medialibrary \
+    APP_STL="c++_shared" \
+    ANDROID_SYS_HEADERS="$ANDROID_SYS_HEADERS" \
     APP_BUILD_SCRIPT=jni/Android.mk \
     APP_PLATFORM=android-${ANDROID_API} \
     APP_ABI=${ANDROID_ABI} \
+    LOCAL_CPP_FEATURES="rtti exceptions" \
+    TARGET_TUPLE=$TARGET_TUPLE \
     NDK_PROJECT_PATH=jni \
     NDK_TOOLCHAIN_VERSION=clang \
     NDK_DEBUG=${NDK_DEBUG} \
-    BUILD_ML=${BUILD_ML}
+    MEDIALIBRARY_LDLIBS="${MEDIALIBRARY_LDLIBS}" \
+    MEDIALIBRARY_INCLUDE_DIR=${MEDIALIBRARY_BUILD_DIR}/include
 
 checkfail "ndk-build failed"
 
-$ANDROID_NDK/ndk-build$OSCMD -C libvlc \
-    APP_BUILD_SCRIPT=jni/loader/Android.mk \
-    APP_PLATFORM=android-${ANDROID_API} \
-    APP_ABI=${ANDROID_ABI} \
-    NDK_PROJECT_PATH=jni/loader \
-    NDK_TOOLCHAIN_VERSION=clang
+cd ${SRC_DIR}
 
-checkfail "ndk-build failed for libvlc"
+if [ ! -d $OUT_LIB_DIR ]; then
+    mkdir -p $OUT_LIB_DIR
+fi
 
-$ANDROID_NDK/ndk-build$OSCMD -C libvlc \
-    VLC_SRC_DIR="$VLC_SRC_DIR" \
-    ANDROID_SYS_HEADERS="$ANDROID_SYS_HEADERS" \
-    LIBIOMX_LIBS="$LIBIOMX_LIBS" \
-    LIBANW_LIBS="$LIBANW_LIBS" \
-    APP_BUILD_SCRIPT=private_libs/Android.mk \
-    APP_PLATFORM=android-${ANDROID_API} \
-    APP_ABI=${ANDROID_ABI} \
-    TARGET_TUPLE=$TARGET_TUPLE \
-    NDK_PROJECT_PATH=private_libs \
-    NDK_TOOLCHAIN_VERSION=clang 2>/dev/null
+if [ "$RELEASE" = 1 ]; then
+    echo -e "\e[1m\e[32mStripping\e[0m"
+    ${CROSS_TOOLS}strip ${OUT_LIB_DIR}/*.so
+    checkfail "stripping"
+fi
+
+OUT_DBG_DIR=.dbg/${ANDROID_ABI}
 
 echo "Dumping dbg symbols info ${OUT_DBG_DIR}"
 
-cd ${SRC_DIR}
-OUT_DBG_DIR=.dbg/${ANDROID_ABI}
-
 mkdir -p $OUT_DBG_DIR
 cp -a libvlc/jni/obj/local/${ANDROID_ABI}/*.so ${OUT_DBG_DIR}
+cp -a libvlc/private_libs/obj/local/${ANDROID_ABI}/*.so ${OUT_DBG_DIR}
+cp -a medialibrary/jni/obj/local/${ANDROID_ABI}/*.so ${OUT_DBG_DIR}

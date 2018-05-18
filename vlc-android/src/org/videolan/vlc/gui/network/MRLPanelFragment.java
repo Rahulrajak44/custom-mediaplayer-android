@@ -21,6 +21,7 @@
 package org.videolan.vlc.gui.network;
 
 import android.app.Activity;
+import android.graphics.PorterDuff;
 import android.net.Uri;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
@@ -35,6 +36,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.videolan.medialibrary.media.MediaWrapper;
@@ -53,9 +55,10 @@ public class MRLPanelFragment extends DialogFragment implements View.OnKeyListen
     public MRLPanelFragment(){}
 
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        setStyle(DialogFragment.STYLE_NO_FRAME, 0);
-        final View v = inflater.inflate(R.layout.mrl_panel, container, false);
-        mEditText = v.findViewById(R.id.mrl_edit);
+        int theme = UiTools.isBlackThemeEnabled() ? R.style.Theme_VLC_Black : R.style.Theme_VLC;
+        setStyle(DialogFragment.STYLE_NO_FRAME, theme);
+        View v = inflater.inflate(R.layout.mrl_panel, container, false);
+        mEditText = (TextInputLayout) v.findViewById(R.id.mrl_edit);
         mEditText.getEditText().setOnKeyListener(this);
         mEditText.getEditText().setOnEditorActionListener(this);
         mEditText.setHint(getString(R.string.open_mrl_dialog_msg));
@@ -65,6 +68,7 @@ public class MRLPanelFragment extends DialogFragment implements View.OnKeyListen
         mAdapter = new MRLAdapter(this);
         recyclerView.setAdapter(mAdapter);
         v.findViewById(R.id.send).setOnClickListener(this);
+        ((ImageView)v.findViewById(R.id.send)).setColorFilter(((VLCApplication)getActivity().getApplication()).getConfig().getColorAccent(), PorterDuff.Mode.SRC_IN);
         return v;
     }
 
@@ -83,9 +87,11 @@ public class MRLPanelFragment extends DialogFragment implements View.OnKeyListen
     @Override
     public void onViewStateRestored(@Nullable Bundle savedInstanceState) {
         super.onViewStateRestored(savedInstanceState);
-        if (savedInstanceState == null || mEditText == null) return;
-        final String mrl = savedInstanceState.getString(KEY_MRL);
-        if (mEditText != null && mEditText.getEditText() != null) mEditText.getEditText().setText(mrl);
+        if (savedInstanceState == null || mEditText == null)
+            return;
+        String mrl = savedInstanceState.getString(KEY_MRL);
+        if (mEditText != null && mEditText.getEditText() != null)
+            mEditText.getEditText().setText(mrl);
     }
 
     private void updateHistory() {
@@ -103,7 +109,7 @@ public class MRLPanelFragment extends DialogFragment implements View.OnKeyListen
 
     private boolean processUri() {
         if (mEditText.getEditText() != null && !TextUtils.isEmpty(mEditText.getEditText().getText())) {
-            final MediaWrapper mw = new MediaWrapper(Uri.parse(mEditText.getEditText().getText().toString().trim()));
+            MediaWrapper mw = new MediaWrapper(Uri.parse(mEditText.getEditText().getText().toString().trim()));
             playMedia(mw);
             mEditText.getEditText().getText().clear();
             return true;
@@ -137,7 +143,8 @@ public class MRLPanelFragment extends DialogFragment implements View.OnKeyListen
     @Override
     public void onDestroy() {
         super.onDestroy();
-        final Activity activity = getActivity();
-        if (activity instanceof DialogActivity) activity.finish();
+        Activity activity = getActivity();
+        if (activity != null && activity instanceof DialogActivity)
+            activity.finish();
     }
 }

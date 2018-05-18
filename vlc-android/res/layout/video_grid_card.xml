@@ -34,10 +34,6 @@
             type="String" />
 
         <variable
-            name="bgColor"
-            type="int" />
-
-        <variable
             name="cover"
             type="android.graphics.drawable.BitmapDrawable" />
 
@@ -60,10 +56,9 @@
         android:paddingLeft="@dimen/left_right_1610_margin"
         android:paddingRight="@dimen/left_right_1610_margin"
         android:paddingBottom="@dimen/top_bottom_1610_margin"
-        android:paddingTop="@dimen/top_bottom_1610_margin"
-        android:background="@{bgColor}" >
+        android:paddingTop="@dimen/top_bottom_1610_margin" >
 
-        <!-- Image loading is handled by org.videolan.vlc.gui.helpers.ImageLoader.loadImage() -->
+        <!-- Image loading is handled by org.videolan.vlc.gui.helpers.AsyncImageLoader.loadPicture() -->
         <ImageView
             android:id="@+id/ml_item_thumbnail"
             android:layout_width="0dp"
@@ -82,8 +77,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:src="@drawable/ic_seen_normal"
-            android:visibility="@{seen == 0L ? View.GONE : View.VISIBLE, default=gone}"
-            vlc:layout_constraintRight_toRightOf="@+id/ml_item_thumbnail"
+            android:visibility="@{seen == 0L ? View.GONE : View.VISIBLE}"
+            vlc:layout_constraintEnd_toEndOf="@+id/ml_item_thumbnail"
             vlc:layout_constraintTop_toTopOf="@+id/ml_item_thumbnail" />
 
         <TextView
@@ -93,6 +88,7 @@
             vlc:layout_constraintStart_toStartOf="parent"
             vlc:layout_constraintEnd_toStartOf="@+id/item_more"
             vlc:layout_constraintBottom_toTopOf="@+id/ml_item_time"
+            android:ellipsize="end"
             android:fontFamily="sans-serif"
             android:maxLines="2"
             android:paddingLeft="@dimen/very_small_margin"
@@ -113,7 +109,7 @@
             android:gravity="start"
             android:paddingLeft="@dimen/half_default_margin"
             android:paddingStart="@dimen/half_default_margin"
-            android:maxLines="1"
+            android:singleLine="true"
             android:text="@{time}"
             android:textColor="@color/grey50"
             android:textSize="@dimen/grid_card_subtitle_text_size"
@@ -166,7 +162,6 @@
             android:paddingRight="@dimen/half_default_margin"
             android:paddingEnd="@dimen/half_default_margin"
             android:progress="@{progress}"
-            android:progressDrawable="@drawable/gridview_progressbar"
             android:secondaryProgress="0"
             android:visibility="@{progress == 0 ? View.INVISIBLE : View.VISIBLE}" />
     </android.support.constraint.ConstraintLayout>

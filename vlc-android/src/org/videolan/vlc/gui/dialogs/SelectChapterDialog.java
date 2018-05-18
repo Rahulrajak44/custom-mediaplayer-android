@@ -22,7 +22,6 @@
 package org.videolan.vlc.gui.dialogs;
 
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.support.v4.app.DialogFragment;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -37,12 +36,11 @@ import org.videolan.libvlc.MediaPlayer;
 import org.videolan.medialibrary.Tools;
 import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
-import org.videolan.vlc.gui.PlaybackServiceActivity;
+import org.videolan.vlc.gui.PlaybackServiceFragment;
 import org.videolan.vlc.gui.helpers.UiTools;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class SelectChapterDialog extends DialogFragment implements PlaybackService.Client.Callback {
@@ -51,24 +49,32 @@ public class SelectChapterDialog extends DialogFragment implements PlaybackServi
 
     private ListView mChapterList;
 
-    private PlaybackServiceActivity.Helper mHelper;
     protected PlaybackService mService;
 
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mHelper = new PlaybackServiceActivity.Helper(getActivity(), this);
+    public SelectChapterDialog() {
     }
 
-    public static SelectChapterDialog newInstance() {
-        return new SelectChapterDialog();
+    public static SelectChapterDialog newInstance(int theme) {
+        SelectChapterDialog myFragment = new SelectChapterDialog();
+
+        Bundle args = new Bundle();
+        args.putInt("theme", theme);
+        myFragment.setArguments(args);
+
+        return myFragment;
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setStyle(DialogFragment.STYLE_NO_FRAME, getArguments().getInt("theme"));
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.dialog_select_chapter, container);
-        mChapterList = view.findViewById(R.id.chapter_list);
+        mChapterList = (ListView) view.findViewById(R.id.chapter_list);
 
         getDialog().setCancelable(true);
         getDialog().setCanceledOnTouchOutside(true);
@@ -81,9 +87,11 @@ public class SelectChapterDialog extends DialogFragment implements PlaybackServi
     private void initChapterList() {
         final MediaPlayer.Chapter[] chapters = mService.getChapters(-1);
         int chaptersCount = chapters != null ? chapters.length : 0;
-        if (chaptersCount <= 1) return;
+        if (chaptersCount <= 1) {
+            return;
+        }
 
-        final List<Map<String, String>> chapterList = new ArrayList<Map<String, String>>();
+        ArrayList<Map<String, String>> chapterList = new ArrayList<Map<String, String>>();
 
         for (int i = 0; i < chaptersCount; i++) {
             String name;
@@ -114,13 +122,13 @@ public class SelectChapterDialog extends DialogFragment implements PlaybackServi
     @Override
     public void onStart() {
         super.onStart();
-        mHelper.onStart();
+        PlaybackServiceFragment.registerPlaybackService(this, this);
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        mHelper.onStop();
+        PlaybackServiceFragment.unregisterPlaybackService(this, this);
     }
 
     @Override
@@ -134,8 +142,8 @@ public class SelectChapterDialog extends DialogFragment implements PlaybackServi
         mService = null;
     }
 
-    private Map<String, String> putData(String name, String time) {
-        Map<String, String> item = new HashMap<String, String>();
+    private HashMap<String, String> putData(String name, String time) {
+        HashMap<String, String> item = new HashMap<String, String>();
         item.put("name", name);
         item.put("time", time);
         return item;

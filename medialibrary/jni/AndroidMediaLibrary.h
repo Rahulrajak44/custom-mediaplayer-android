@@ -28,13 +28,12 @@ public:
     AndroidMediaLibrary(JavaVM *vm, fields *ref_fields, jobject thiz);
     ~AndroidMediaLibrary();
 
-    medialibrary::InitializeResult initML(const std::string& dbPath, const std::string& thumbsPath);
+    bool initML(const std::string& dbPath, const std::string& thumbsPath);
     void start();
-    bool addDevice(const std::string& uuid, const std::string& path, bool removable);
+    bool addDevice(const std::string& uuid, const std::string& path, bool removable, bool notif);
     std::vector<std::tuple<std::string, std::string, bool>> devices();
     bool removeDevice(const std::string& uuid);
     void banFolder(const std::string& path);
-    void unbanFolder(const std::string& path);
     void discover(const std::string&);
     void removeEntryPoint(const std::string& entryPoint);
     std::vector<medialibrary::FolderPtr> entryPoints();
@@ -45,7 +44,6 @@ public:
     void reload();
     void reload( const std::string& entryPoint );
     void forceParserRetry();
-    void forceRescan();
     bool increasePlayCount(int64_t mediaId);
     /* History */
     std::vector<medialibrary::MediaPtr> lastMediaPlayed();
@@ -64,21 +62,21 @@ public:
     medialibrary::MediaPtr addMedia(const std::string& mrl);
     std::vector<medialibrary::MediaPtr> videoFiles( medialibrary::SortingCriteria sort = medialibrary::SortingCriteria::Default, bool desc = false );
     std::vector<medialibrary::MediaPtr> audioFiles( medialibrary::SortingCriteria sort = medialibrary::SortingCriteria::Default, bool desc = false );
-    std::vector<medialibrary::AlbumPtr> albums(medialibrary::SortingCriteria sort, bool desc);
+    std::vector<medialibrary::AlbumPtr> albums();
     medialibrary::AlbumPtr album(int64_t albumId);
-    std::vector<medialibrary::ArtistPtr> artists(bool includeAll, medialibrary::SortingCriteria sort, bool desc);
+    std::vector<medialibrary::ArtistPtr> artists();
     medialibrary::ArtistPtr artist(int64_t artistId);
-    std::vector<medialibrary::GenrePtr> genres(medialibrary::SortingCriteria sort, bool desc);
+    std::vector<medialibrary::GenrePtr> genres();
     medialibrary::GenrePtr genre(int64_t genreId);
-    std::vector<medialibrary::PlaylistPtr> playlists(medialibrary::SortingCriteria sort, bool desc);
+    std::vector<medialibrary::PlaylistPtr> playlists();
     medialibrary::PlaylistPtr playlist( int64_t playlistId );
     medialibrary::PlaylistPtr PlaylistCreate( const std::string &name );
-    std::vector<medialibrary::MediaPtr> tracksFromAlbum( int64_t albumId, medialibrary::SortingCriteria sort, bool desc );
-    std::vector<medialibrary::MediaPtr> mediaFromArtist( int64_t artistId, medialibrary::SortingCriteria sort, bool desc );
-    std::vector<medialibrary::AlbumPtr> albumsFromArtist( int64_t artistId, medialibrary::SortingCriteria sort, bool desc );
-    std::vector<medialibrary::MediaPtr> mediaFromGenre( int64_t genreId, medialibrary::SortingCriteria sort, bool desc );
-    std::vector<medialibrary::AlbumPtr> albumsFromGenre( int64_t genreId, medialibrary::SortingCriteria sort, bool desc );
-    std::vector<medialibrary::ArtistPtr> artistsFromGenre( int64_t genreId, medialibrary::SortingCriteria sort, bool desc );
+    std::vector<medialibrary::MediaPtr> tracksFromAlbum( int64_t albumId );
+    std::vector<medialibrary::MediaPtr> mediaFromArtist( int64_t artistId );
+    std::vector<medialibrary::AlbumPtr> albumsFromArtist( int64_t artistId );
+    std::vector<medialibrary::MediaPtr> mediaFromGenre( int64_t genreId );
+    std::vector<medialibrary::AlbumPtr> albumsFromGenre( int64_t genreId );
+    std::vector<medialibrary::ArtistPtr> artistsFromGenre( int64_t genreId );
     std::vector<medialibrary::MediaPtr> mediaFromPlaylist( int64_t playlistId );
     bool playlistAppend(int64_t playlistId, int64_t mediaId);
     bool playlistAdd(int64_t playlistId, int64_t mediaId, unsigned int position);
@@ -86,7 +84,6 @@ public:
     bool playlistRemove(int64_t playlistId, int64_t mediaId);
     bool PlaylistDelete( int64_t playlistId );
 
-    void requestThumbnail( int64_t media_id );
 
     void onMediaAdded( std::vector<medialibrary::MediaPtr> media );
     void onMediaUpdated( std::vector<medialibrary::MediaPtr> media ) ;
@@ -117,19 +114,21 @@ public:
     void onEntryPointRemoved( const std::string& entryPoint, bool success );
     void onParsingStatsUpdated( uint32_t percent);
     void onBackgroundTasksIdleChanged( bool isIdle );
-    void onMediaThumbnailReady( medialibrary::MediaPtr media, bool success );
 
 private:
     void jni_detach_thread(void *data);
+    jobject getWeakReference(JNIEnv *env);
     JNIEnv *getEnv();
     void detachCurrentThread();
 
     pthread_once_t key_once = PTHREAD_ONCE_INIT;
-    jweak weak_thiz;
+    jweak weak_thiz, weak_compat;
     fields *p_fields;
     medialibrary::IMediaLibrary* p_ml;
     std::shared_ptr<AndroidDeviceLister> p_lister;
     medialibrary::IDeviceListerCb* p_DeviceListerCb = nullptr;
+    std::string mainStorage = "";
+    bool discoveryEnded = false;
     bool m_paused = false;
     uint32_t m_nbDiscovery = 0, m_progress = 0, m_mediaAddedType = 0, m_mediaUpdatedType = 0;
 };

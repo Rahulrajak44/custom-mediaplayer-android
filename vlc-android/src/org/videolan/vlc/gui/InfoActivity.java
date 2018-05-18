@@ -1,6 +1,7 @@
 package org.videolan.vlc.gui;
 
 
+import android.content.res.ColorStateList;
 import android.databinding.DataBindingUtil;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
@@ -34,11 +35,10 @@ import org.videolan.vlc.gui.helpers.AudioUtil;
 import org.videolan.vlc.gui.helpers.FloatingActionButtonBehavior;
 import org.videolan.vlc.gui.preferences.PreferencesActivity;
 import org.videolan.vlc.gui.video.MediaInfoAdapter;
-import org.videolan.vlc.media.MediaUtils;
+import org.videolan.vlc.util.AdLoader;
 import org.videolan.vlc.util.Strings;
 import org.videolan.vlc.util.VLCInstance;
 import org.videolan.vlc.util.WeakHandler;
-import org.videolan.vlc.util.WorkersKt;
 
 import java.io.File;
 import java.util.LinkedList;
@@ -84,13 +84,13 @@ public class InfoActivity extends AudioPlayerContainerActivity implements View.O
                 ? savedInstanceState.getInt(TAG_FAB_VISIBILITY) : -1;
 
         if (!TextUtils.isEmpty(mItem.getArtworkMrl())) {
-            WorkersKt.runBackground(new Runnable() {
+            VLCApplication.runBackground(new Runnable() {
                 @Override
                 public void run() {
                     final Bitmap cover = AudioUtil.readCoverBitmap(Uri.decode(mItem.getArtworkMrl()), 0);
                     if (cover != null) {
                         mBinding.setCover(new BitmapDrawable(InfoActivity.this.getResources(), cover));
-                        WorkersKt.runOnMainThread(new Runnable() {
+                        VLCApplication.runOnMainThread(new Runnable() {
                             @Override
                             public void run() {
                                 ViewCompat.setNestedScrollingEnabled(mBinding.container, true);
@@ -106,6 +106,9 @@ public class InfoActivity extends AudioPlayerContainerActivity implements View.O
         } else
             noCoverFallback();
         mBinding.fab.setOnClickListener(this);
+        mBinding.fab.setBackgroundTintList(ColorStateList.valueOf(((VLCApplication)getApplication()).getConfig().getColorAccent()));
+        mBinding.imageProgress.getProgressDrawable().setColorFilter(((VLCApplication)getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+
         if (mItem.getItemType() == MediaLibraryItem.TYPE_MEDIA) {
             mAdapter = new MediaInfoAdapter();
             mBinding.list.setLayoutManager(new LinearLayoutManager(mBinding.getRoot().getContext()));
@@ -113,7 +116,7 @@ public class InfoActivity extends AudioPlayerContainerActivity implements View.O
             mCheckFileTask = (CheckFileTask) new CheckFileTask().execute();
             mParseTracksTask = (ParseTracksTask) new ParseTracksTask().execute();
         }
-        WorkersKt.runBackground(new Runnable() {
+        VLCApplication.runBackground(new Runnable() {
             @Override
             public void run() {
                 updateMeta();
@@ -186,8 +189,13 @@ public class InfoActivity extends AudioPlayerContainerActivity implements View.O
 
     @Override
     public void onClick(View v) {
-        MediaUtils.openArray(this, mItem.getTracks(), 0);
-        finish();
+        AdLoader.loadFullscreenBanner(this, new AdLoader.ContentPlayAllowedListener() {
+            @Override
+            public void onPlayAllowed() {
+                mService.load(mItem.getTracks(), 0);
+                finish();
+            }
+        });
     }
 
     @Override

@@ -22,17 +22,16 @@
 
 package org.videolan.vlc.gui.preferences;
 
-import android.app.Activity;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.support.v7.preference.CheckBoxPreference;
 import android.support.v7.preference.Preference;
 import android.support.v7.preference.TwoStatePreference;
 
-import org.videolan.libvlc.util.AndroidUtil;
 import org.videolan.libvlc.util.HWDecoderUtil;
+import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
-import org.videolan.vlc.util.Constants;
+import org.videolan.vlc.VLCApplication;
+import org.videolan.vlc.config.Config;
 import org.videolan.vlc.util.VLCInstance;
 
 public class PreferencesAudio extends BasePreferenceFragment implements SharedPreferences.OnSharedPreferenceChangeListener {
@@ -48,42 +47,42 @@ public class PreferencesAudio extends BasePreferenceFragment implements SharedPr
     }
 
     @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        findPreference("audio_ducking").setVisible(!AndroidUtil.isOOrLater);
-        final HWDecoderUtil.AudioOutput aout = HWDecoderUtil.getAudioOutputFromDevice();
-        if (aout != HWDecoderUtil.AudioOutput.ALL) {
-            /* no AudioOutput choice */
-            findPreference("aout").setVisible(false);
-        }
-        updatePassThroughSummary();
-        final boolean opensles = "1".equals(getPreferenceManager().getSharedPreferences().getString("aout", "0"));
-        if (opensles) findPreference("audio_digital_output").setVisible(false);
-    }
-
-    private void updatePassThroughSummary() {
-        final boolean pt = getPreferenceManager().getSharedPreferences().getBoolean("audio_digital_output", false);
-        findPreference("audio_digital_output").setSummary(pt ? R.string.audio_digital_output_enabled : R.string.audio_digital_output_disabled);
-    }
-
-    @Override
     public void onStart() {
         super.onStart();
         getPreferenceScreen().getSharedPreferences().registerOnSharedPreferenceChangeListener(this);
     }
 
     @Override
-    public void onStop() {
-        super.onStop();
-        getPreferenceScreen().getSharedPreferences().unregisterOnSharedPreferenceChangeListener(this);
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final HWDecoderUtil.AudioOutput aout = HWDecoderUtil.getAudioOutputFromDevice();
+        if (aout != HWDecoderUtil.AudioOutput.ALL) {
+            /* no AudioOutput choice */
+            findPreference("aout").setVisible(false);
+        }
+        Config config = ((VLCApplication)getActivity().getApplication()).getConfig();
+
+        findPreference("audio_save_repeat").setVisible(false);
+        findPreference("headset_prefs_category").setVisible(false);
+        findPreference("enable_headset_detection").setVisible(false);
+        findPreference("enable_play_on_headset_insertion").setVisible(false);
+        findPreference("enable_steal_remote_control").setVisible(false);
+        findPreference("advanced").setVisible(false);
+        findPreference("aout").setVisible(false);
+        findPreference("aout").setTitle(getString(R.string.aout_summary, config.getAppName()));
+
     }
 
     @Override
     public boolean onPreferenceTreeClick(Preference preference) {
-        if (preference.getKey() == null) return false;
+        if (preference.getKey() == null)
+            return false;
         switch (preference.getKey()){
             case "enable_headset_detection":
                 ((PreferencesActivity)getActivity()).detectHeadset(((TwoStatePreference) preference).isChecked());
+                return true;
+            case "enable_steal_remote_control":
+                PlaybackService.Client.restartService(getActivity());
                 return true;
         }
         return super.onPreferenceTreeClick(preference);
@@ -91,22 +90,11 @@ public class PreferencesAudio extends BasePreferenceFragment implements SharedPr
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        final Activity activity = getActivity();
-        if (activity == null) return;
         switch (key){
             case "aout":
                 VLCInstance.restart();
-                ((PreferencesActivity)activity).restartMediaPlayer();
-                final boolean opensles = "1".equals(getPreferenceManager().getSharedPreferences().getString("aout", "0"));
-                if (opensles) ((CheckBoxPreference)findPreference("audio_digital_output")).setChecked(false);
-                findPreference("audio_digital_output").setVisible(!opensles);
-                break;
-            case Constants.KEY_ARTISTS_SHOW_ALL:
-                ((PreferencesActivity)activity).updateArtists();
-                break;
-            case "audio_digital_output":
-                updatePassThroughSummary();
-                break;
+                if (getActivity() != null )
+                    ((PreferencesActivity)getActivity()).restartMediaPlayer();
         }
     }
 }

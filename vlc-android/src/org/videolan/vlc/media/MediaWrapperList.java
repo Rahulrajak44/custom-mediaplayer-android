@@ -20,15 +20,13 @@
  *****************************************************************************/
 package org.videolan.vlc.media;
 
+import android.net.Uri;
 import android.support.annotation.Nullable;
 
-import org.videolan.medialibrary.Medialibrary;
 import org.videolan.medialibrary.media.MediaWrapper;
-import org.videolan.vlc.VLCApplication;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.ListIterator;
 
 public class MediaWrapperList {
     private static final String TAG = "VLC/MediaWrapperList";
@@ -44,13 +42,17 @@ public class MediaWrapperList {
     private static final int EVENT_MOVED = 2;
 
     /* TODO: add locking */
-    private final List<MediaWrapper> mInternalList = new ArrayList<>();
-    private final List<EventListener> mEventListenerList = new ArrayList<>();
+    private ArrayList<MediaWrapper> mInternalList;
+    private ArrayList<EventListener> mEventListenerList;
     private int mVideoCount = 0;
 
-    public synchronized void add(MediaWrapper media) {
+    public MediaWrapperList() {
+        mEventListenerList = new ArrayList<>();
+        mInternalList = new ArrayList<>();
+    }
+
+    public void add(MediaWrapper media) {
         mInternalList.add(media);
-        signalEventListeners(EVENT_ADDED, mInternalList.size()-1, -1, media.getLocation());
         if (media.getType() == MediaWrapper.TYPE_VIDEO)
             ++mVideoCount;
     }
@@ -83,7 +85,7 @@ public class MediaWrapperList {
     /**
      * Clear the media list. (remove all media)
      */
-    public synchronized void clear() {
+    public void clear() {
         // Signal to observers of media being deleted.
         for(int i = 0; i < mInternalList.size(); i++)
             signalEventListeners(EVENT_REMOVED, i, -1, mInternalList.get(i).getLocation());
@@ -91,11 +93,14 @@ public class MediaWrapperList {
         mVideoCount = 0;
     }
 
-    private synchronized boolean isValid(int position) {
+    private boolean isValid(int position) {
         return position >= 0 && position < mInternalList.size();
     }
 
-    public synchronized void insert(int position, MediaWrapper media) {
+    public void insert(int position, Uri uri) {
+        insert(position, new MediaWrapper(uri));
+    }
+    public void insert(int position, MediaWrapper media) {
         mInternalList.add(position, media);
         signalEventListeners(EVENT_ADDED, position, -1, media.getLocation());
         if (media.getType() == MediaWrapper.TYPE_VIDEO)
@@ -109,7 +114,7 @@ public class MediaWrapperList {
      * @param endPosition end position
      * @throws IndexOutOfBoundsException
      */
-    public synchronized void move(int startPosition, int endPosition) {
+    public void move(int startPosition, int endPosition) {
         if (!(isValid(startPosition)
               && endPosition >= 0 && endPosition <= mInternalList.size()))
             throw new IndexOutOfBoundsException("Indexes out of range");
@@ -123,7 +128,7 @@ public class MediaWrapperList {
         signalEventListeners(EVENT_MOVED, startPosition, endPosition, toMove.getLocation());
     }
 
-    public synchronized void remove(int position) {
+    public void remove(int position) {
         if (!isValid(position))
             return;
         if (mInternalList.get(position).getType() == MediaWrapper.TYPE_VIDEO)
@@ -133,7 +138,7 @@ public class MediaWrapperList {
         signalEventListeners(EVENT_REMOVED, position, -1, uri);
     }
 
-    public synchronized void remove(String location) {
+    public void remove(String location) {
         for (int i = 0; i < mInternalList.size(); ++i) {
             String uri = mInternalList.get(i).getLocation();
             if (uri.equals(location)) {
@@ -151,11 +156,13 @@ public class MediaWrapperList {
     }
 
     @Nullable
-    public synchronized MediaWrapper getMedia(int position) {
-        return isValid(position) ? mInternalList.get(position) : null;
+    public MediaWrapper getMedia(int position) {
+        if (!isValid(position))
+            return null;
+        return mInternalList.get(position);
     }
 
-    public synchronized List<MediaWrapper> getAll() {
+    public List<MediaWrapper> getAll() {
         return mInternalList;
     }
 
@@ -163,25 +170,14 @@ public class MediaWrapperList {
      * @param position The index of the media in the list
      * @return null if not found
      */
-    public synchronized String getMRL(int position) {
-        if (!isValid(position)) return null;
+    public String getMRL(int position) {
+        if (!isValid(position))
+            return null;
         return mInternalList.get(position).getLocation();
     }
 
-    public synchronized boolean isAudioList() {
+    public boolean isAudioList() {
         return mVideoCount == 0;
-    }
-
-    public synchronized void updateWithMLMeta() {
-        final ListIterator<MediaWrapper> iter = mInternalList.listIterator();
-        final Medialibrary ml = VLCApplication.getMLInstance();
-        while (iter.hasNext()) {
-            final MediaWrapper media = iter.next();
-            if (media.getId() == 0L) {
-                final MediaWrapper mw = ml.findMedia(media);
-                if (mw.getId() != 0) iter.set(mw);
-            }
-        }
     }
 
     @Override

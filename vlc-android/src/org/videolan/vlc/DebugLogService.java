@@ -35,6 +35,7 @@ import android.os.RemoteException;
 import android.support.v4.app.NotificationCompat;
 import android.text.format.DateFormat;
 
+import org.videolan.vlc.config.Config;
 import org.videolan.vlc.gui.DebugLogActivity;
 import org.videolan.vlc.util.AndroidDevices;
 import org.videolan.vlc.util.Logcat;
@@ -139,11 +140,12 @@ public class DebugLogService extends Service implements Logcat.Callback, Runnabl
         debugLogIntent.setAction("android.intent.action.MAIN");
         debugLogIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP);
         final PendingIntent pi = PendingIntent.getActivity(this, 0, debugLogIntent, 0);
+        Config config = ((VLCApplication)getApplication()).getConfig();
 
         final NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
-        builder.setContentTitle(getResources().getString(R.string.log_service_title));
+        builder.setContentTitle(getResources().getString(R.string.log_service_title, config.getAppName()));
         builder.setContentText(getResources().getString(R.string.log_service_text));
-        builder.setSmallIcon(R.drawable.ic_stat_vlc);
+        builder.setSmallIcon(R.drawable.app_icon);
         builder.setContentIntent(pi);
         final Notification notification = builder.build();
         startForeground(R.string.log_service_title, notification);

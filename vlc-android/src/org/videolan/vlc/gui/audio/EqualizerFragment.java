@@ -20,96 +20,97 @@
 package org.videolan.vlc.gui.audio;
 
 import android.content.Context;
-import android.content.DialogInterface;
-import android.databinding.DataBindingUtil;
-import android.databinding.ObservableInt;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
-import android.support.annotation.Nullable;
-import android.support.v7.app.AlertDialog;
+import android.support.v4.graphics.drawable.DrawableCompat;
 import android.support.v7.app.AppCompatDialogFragment;
-import android.text.TextUtils;
+import android.support.v7.widget.SwitchCompat;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
-import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.CompoundButton.OnCheckedChangeListener;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
-import android.widget.Toast;
+import android.widget.Spinner;
 
 import org.videolan.libvlc.MediaPlayer;
 import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
 import org.videolan.vlc.VLCApplication;
-import org.videolan.vlc.databinding.EqualizerBinding;
-import org.videolan.vlc.gui.PlaybackServiceActivity;
-import org.videolan.vlc.gui.helpers.UiTools;
+import org.videolan.vlc.config.Config;
+import org.videolan.vlc.gui.PlaybackServiceFragment;
 import org.videolan.vlc.gui.view.EqualizerBar;
 import org.videolan.vlc.interfaces.OnEqualizerBarChangeListener;
 import org.videolan.vlc.util.VLCOptions;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
 
 public class EqualizerFragment extends AppCompatDialogFragment implements PlaybackService.Client.Callback {
     private PlaybackService mService;
 
     public final static String TAG = "VLC/EqualizerFragment";
-
+    private SwitchCompat button;
+    private Spinner equalizer_presets;
+    private SeekBar preamp;
+    private LinearLayout bands_layout;
     private MediaPlayer.Equalizer mEqualizer = null;
-    private PlaybackServiceActivity.Helper mHelper;
     private static final int BAND_COUNT = MediaPlayer.Equalizer.getBandCount();
-    private int customCount = 0;
-    private int presetCount = 0;
-    private List<String> allSets = new ArrayList<>();
-    private ArrayAdapter<String> adapter;
-    private Context context;
-    private int revertPos = 0;
-    private int savePos = 0;
-    private boolean updateAlreadyHandled = false;
-    private EqualizerBinding binding;
-    final private EqualizerState mState = new EqualizerState();
-    private final String newPresetName = VLCApplication.getAppResources().getString(R.string.equalizer_new_preset_name);
-
-    private final static int TYPE_PRESET = 0;
-    private final static int TYPE_CUSTOM = 1;
-    private final static int TYPE_NEW = 2;
-
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mHelper = new PlaybackServiceActivity.Helper(getActivity(), this);
-    }
+    private  Config config;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         super.onCreateView(inflater, container, savedInstanceState);
-        binding = DataBindingUtil.inflate(inflater, R.layout.equalizer, container, false);
-        binding.setState(mState);
-        return binding.getRoot();
+        View v = inflater.inflate(R.layout.equalizer, container, false);
+        saveViewChildren(v);
+
+        return v;
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        mHelper.onStart();
+        PlaybackServiceFragment.registerPlaybackService(this, this);
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        mHelper.onStop();
+        PlaybackServiceFragment.unregisterPlaybackService(this, this);
+    }
+
+    private void saveViewChildren(View v) {
+        config = ((VLCApplication)getActivity().getApplication()).getConfig();
+
+        button = v.findViewById(R.id.equalizer_button);
+        int[][] states = new int[][] {
+                new int[] {-android.R.attr.state_checked},
+                new int[] {android.R.attr.state_checked},
+        };
+
+        int[] thumbColors = new int[] {
+                Color.argb(255, 236, 236, 236),
+                config.getColorAccent(),
+        };
+
+        int[] trackColors = new int[] {
+                Color.argb(255, 0, 0, 0),
+                config.getColorAccent(),
+        };
+
+        DrawableCompat.setTintList(DrawableCompat.wrap(button.getThumbDrawable()), new ColorStateList(states, thumbColors));
+        DrawableCompat.setTintList(DrawableCompat.wrap(button.getTrackDrawable()), new ColorStateList(states, trackColors));
+
+
+        equalizer_presets = v.findViewById(R.id.equalizer_presets);
+        preamp = v.findViewById(R.id.equalizer_preamp);
+        preamp.getProgressDrawable().setColorFilter(config.getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+        preamp.getThumb().setColorFilter(config.getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+        bands_layout = v.findViewById(R.id.equalizer_bands);
     }
 
     @Override
@@ -123,93 +124,56 @@ public class EqualizerFragment extends AppCompatDialogFragment implements Playba
     }
 
     private void fillViews() {
-        context = getActivity();
+        final Context context = getActivity();
 
         if (context == null)
             return;
 
-        allSets.clear();
-        allSets = new ArrayList<>();
-        allSets.addAll(Arrays.asList(getEqualizerPresets()));
-        presetCount = allSets.size();
-        for (Map.Entry<String, ?> entry : PreferenceManager.getDefaultSharedPreferences(context).getAll().entrySet()) {
-            if (entry.getKey().startsWith("custom_equalizer_")) {
-                allSets.add(entry.getKey().replace("custom_equalizer_", "").replace("_", " "));
-                customCount++;
-            }
-        }
-        allSets.add(newPresetName);
+        final String[] presets = getEqualizerPresets();
 
-        mEqualizer = VLCOptions.getEqualizerSetFromSettings(context, true);
+        mEqualizer = VLCOptions.getEqualizer(context);
+        final boolean isEnabled = mEqualizer != null;
+        if (mEqualizer == null)
+            mEqualizer = MediaPlayer.Equalizer.create();
 
         // on/off
-        binding.equalizerButton.setChecked(VLCOptions.getEqualizerEnabledState(context));
-        binding.equalizerButton.setOnCheckedChangeListener(new OnCheckedChangeListener() {
+        button.setChecked(isEnabled);
+        button.setOnCheckedChangeListener(new OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 if (mService != null)
-                    if (isChecked)
-                        mService.setEqualizer(mEqualizer);
-                    else
-                        mService.setEqualizer(null);
-            }
-        });
-        binding.equalizerSave.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                createSaveCustomSetDialog(binding.equalizerPresets.getSelectedItemPosition(), true, false);
-            }
-        });
-        binding.equalizerDelete.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                createDeleteCustomSetSnacker();
-            }
-        });
-        binding.equalizerRevert.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                revertCustomSetChanges();
+                    mService.setEqualizer(isChecked ? mEqualizer : null);
             }
         });
 
         // presets
-        adapter = new ArrayAdapter<>(context, android.R.layout.simple_spinner_dropdown_item, allSets);
-        binding.equalizerPresets.setAdapter(adapter);
+        equalizer_presets.setAdapter(new ArrayAdapter<>(getActivity(), android.R.layout.simple_spinner_dropdown_item, presets));
 
         // Set the default selection asynchronously to prevent a layout initialization bug.
-        binding.equalizerPresets.post(new Runnable() {
+        final int equalizer_preset_pref = VLCOptions.getEqualizerPreset(context);
+        equalizer_presets.post(new Runnable() {
             @Override
             public void run() {
-                binding.equalizerPresets.setOnItemSelectedListener(mSetListener);
-                final int pos = allSets.indexOf(VLCOptions.getEqualizerNameFromSettings(context));
-                mState.update(pos, VLCOptions.getEqualizerSavedState(context));
-                updateAlreadyHandled = true;
-                if (binding.equalizerButton.isChecked() || !mState.saved) {
-                    savePos = pos;
-                    revertPos = getEqualizerType(pos) == TYPE_CUSTOM ? pos : 0;
-                    binding.equalizerPresets.setSelection(pos);
-                } else {
-                    updateEqualizer(0);
-                }
-
+                equalizer_presets.setSelection(equalizer_preset_pref, false);
+                equalizer_presets.setOnItemSelectedListener(mPresetListener);
             }
         });
 
         // preamp
-        binding.equalizerPreamp.setMax(40);
-        binding.equalizerPreamp.setProgress((int) mEqualizer.getPreAmp() + 20);
-        binding.equalizerPreamp.setOnSeekBarChangeListener(mPreampListener);
+        preamp.setMax(40);
+        preamp.setProgress((int) mEqualizer.getPreAmp() + 20);
+        preamp.setOnSeekBarChangeListener(mPreampListener);
 
         // bands
         for (int i = 0; i < BAND_COUNT; i++) {
             float band = MediaPlayer.Equalizer.getBandFrequency(i);
+            config = ((VLCApplication)getActivity().getApplication()).getConfig();
 
-            EqualizerBar bar = new EqualizerBar(context, band);
+            EqualizerBar bar = new EqualizerBar(getActivity(), band, config.getColorAccent());
             bar.setValue(mEqualizer.getAmp(i));
             bar.setListener(new BandListener(i));
 
-            binding.equalizerBands.addView(bar);
+            bands_layout.addView(bar);
             LinearLayout.LayoutParams params =
                     new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT,
                                                   LayoutParams.MATCH_PARENT, 1);
@@ -220,18 +184,15 @@ public class EqualizerFragment extends AppCompatDialogFragment implements Playba
     @Override
     public void onPause() {
         super.onPause();
-        binding.equalizerButton.setOnCheckedChangeListener(null);
-        binding.equalizerPresets.setOnItemSelectedListener(null);
-        binding.equalizerPreamp.setOnSeekBarChangeListener(null);
-        binding.equalizerBands.removeAllViews();
-        if (binding.equalizerButton.isChecked()) {
-            int pos = binding.equalizerPresets.getSelectedItemPosition();
-            VLCOptions.saveEqualizerInSettings(context, mEqualizer, allSets.get(pos), true, mState.saved);
-        } else {
-            VLCOptions.saveEqualizerInSettings(context, MediaPlayer.Equalizer.createFromPreset(0), allSets.get(0), false, true);
-        }
-        if (!mState.saved)
-            createSaveCustomSetDialog(binding.equalizerPresets.getSelectedItemPosition(), false, true);
+        button.setOnCheckedChangeListener(null);
+        equalizer_presets.setOnItemSelectedListener(null);
+        preamp.setOnSeekBarChangeListener(null);
+        bands_layout.removeAllViews();
+
+        if (button.isChecked())
+            VLCOptions.setEqualizer(getActivity(), mEqualizer, equalizer_presets.getSelectedItemPosition());
+        else
+            VLCOptions.setEqualizer(getActivity(), null, 0);
     }
 
     @Override
@@ -240,19 +201,20 @@ public class EqualizerFragment extends AppCompatDialogFragment implements Playba
         fillViews();
     }
 
-    private final OnItemSelectedListener mSetListener = new OnItemSelectedListener() {
+    private final OnItemSelectedListener mPresetListener = new OnItemSelectedListener() {
         @Override
         public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
             if (mService == null)
                 return;
-            if (!binding.equalizerButton.isChecked() && !updateAlreadyHandled)
-                binding.equalizerButton.setChecked(true);
 
-            //save set if changes made (needs old currentPosition)
-            if (savePos >= 0 && !mState.saved && !updateAlreadyHandled)
-                createSaveCustomSetDialog(savePos, false, false);
+            mEqualizer = MediaPlayer.Equalizer.createFromPreset(pos);
 
-            updateEqualizer(pos);
+            preamp.setProgress((int) mEqualizer.getPreAmp() + 20);
+            for (int i = 0; i < BAND_COUNT; ++i) {
+                EqualizerBar bar = (EqualizerBar) bands_layout.getChildAt(i);
+                if (bar != null)
+                    bar.setValue(mEqualizer.getAmp(i));
+            }
         }
 
         @Override
@@ -273,24 +235,9 @@ public class EqualizerFragment extends AppCompatDialogFragment implements Playba
         public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
             if (!fromUser || mService == null)
                 return;
+
             mEqualizer.setPreAmp(progress - 20);
-            if (!binding.equalizerButton.isChecked())
-                binding.equalizerButton.setChecked(true);
-
-            int pos = binding.equalizerPresets.getSelectedItemPosition();
-            if (getEqualizerType(pos) == TYPE_PRESET) {
-                revertPos = pos;
-                savePos = presetCount + customCount;
-                mState.update(presetCount + customCount, false);
-                updateAlreadyHandled = true;
-                binding.equalizerPresets.setSelection(presetCount + customCount);
-            } else if (getEqualizerType(pos) == TYPE_CUSTOM) {
-                revertPos = pos;
-                savePos = pos;
-                mState.update(pos, false);
-            }
-
-            if (binding.equalizerButton.isChecked())
+            if (button.isChecked())
                 mService.setEqualizer(mEqualizer);
         }
     };
@@ -303,27 +250,9 @@ public class EqualizerFragment extends AppCompatDialogFragment implements Playba
         }
 
         @Override
-        public void onProgressChanged(float value, boolean fromUser) {
-            if (!fromUser)
-                return;
+        public void onProgressChanged(float value) {
             mEqualizer.setAmp(index, value);
-            if (!binding.equalizerButton.isChecked())
-                binding.equalizerButton.setChecked(true);
-
-            int pos = binding.equalizerPresets.getSelectedItemPosition();
-            if (getEqualizerType(pos) == TYPE_PRESET) {
-                revertPos = pos;
-                savePos = presetCount + customCount;
-                mState.update(presetCount + customCount, false);
-                updateAlreadyHandled = true;
-                binding.equalizerPresets.setSelection(presetCount + customCount);
-            } else if (getEqualizerType(pos) == TYPE_CUSTOM) {
-                revertPos = pos;
-                savePos = pos;
-                mState.update(pos, false);
-            }
-
-            if (binding.equalizerButton.isChecked() && mService != null)
+            if (button.isChecked() && mService != null)
                 mService.setEqualizer(mEqualizer);
         }
     }
@@ -337,197 +266,5 @@ public class EqualizerFragment extends AppCompatDialogFragment implements Playba
             presets[i] = MediaPlayer.Equalizer.getPresetName(i);
         }
         return presets;
-    }
-
-    public void createSaveCustomSetDialog(final int positionToSave, final boolean displayedByUser, final boolean onPause) {
-        final String oldName = allSets.get(positionToSave);
-
-        final MediaPlayer.Equalizer temporarySet = MediaPlayer.Equalizer.create();
-        temporarySet.setPreAmp(mEqualizer.getPreAmp());
-        for (int i=0; i< MediaPlayer.Equalizer.getBandCount(); i++)
-            temporarySet.setAmp(i, mEqualizer.getAmp(i));
-
-        final EditText input = new EditText(context);
-        input.setText(oldName);
-        input.setSelectAllOnFocus(true);
-
-        final AlertDialog saveEqualizer = new AlertDialog.Builder(context)
-                .setTitle(getResources().getString(displayedByUser
-                        ? R.string.custom_set_save_title
-                        : R.string.custom_set_save_warning))
-                .setMessage(getResources().getString((getEqualizerType(positionToSave) == TYPE_CUSTOM)
-                        ? R.string.existing_custom_set_save_message
-                        : R.string.new_custom_set_save_message))
-                .setView(input)
-                .setPositiveButton(R.string.save, null)
-                .setNegativeButton(R.string.do_not_save, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialogInterface, int i) {
-                        if (onPause)
-                            VLCOptions.saveEqualizerInSettings(context, mEqualizer, allSets.get(positionToSave), binding.equalizerButton.isChecked(), false);
-                    }
-                })
-                .setOnCancelListener(new DialogInterface.OnCancelListener() {
-                    @Override
-                    public void onCancel(DialogInterface dialogInterface) {
-                        if (onPause)
-                            VLCOptions.saveEqualizerInSettings(context, mEqualizer, allSets.get(positionToSave), binding.equalizerButton.isChecked(), false);
-                    }
-                })
-                .create();
-        saveEqualizer.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
-
-        //HACK to prevent closure
-        saveEqualizer.setOnShowListener(new DialogInterface.OnShowListener() {
-            @Override
-            public void onShow(DialogInterface dialog) {
-                final Button positiveButton = ((AlertDialog) dialog).getButton(AlertDialog.BUTTON_POSITIVE);
-                positiveButton.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        final String newName = input.getText().toString();
-                        if (newName.contains("_") || TextUtils.equals(newName, newPresetName)) {
-                            Toast.makeText(VLCApplication.getAppContext(), VLCApplication.getAppContext().getResources().getString(R.string.custom_set_wrong_input), Toast.LENGTH_SHORT).show();
-                        } else if (allSets.contains(newName) && !TextUtils.equals(newName,oldName)) {
-                            Toast.makeText(VLCApplication.getAppContext(), VLCApplication.getAppContext().getResources().getString(R.string.custom_set_already_exist), Toast.LENGTH_SHORT).show();
-                        } else {
-                            VLCOptions.saveCustomSet(context, temporarySet, newName);
-                            if (onPause) {
-                                if (binding.equalizerButton.isChecked())
-                                    VLCOptions.saveEqualizerInSettings(context, temporarySet, newName, true, true);
-                            } else {
-                                if (TextUtils.equals(newName,oldName)) {
-                                    if (displayedByUser) {
-                                        mState.update(allSets.indexOf(newName), true);
-                                    }
-                                } else {
-                                    //insert new item before the one being saved in order to keep position
-                                    allSets.add(positionToSave, newName);
-                                    customCount++;
-                                    if (displayedByUser) {
-                                        adapter.notifyDataSetChanged();
-                                        mState.update(allSets.indexOf(newName), true);
-                                        updateAlreadyHandled = true;
-                                    }
-                                }
-                            }
-                            saveEqualizer.dismiss();
-                        }
-                    }
-                });
-            }
-        });
-        saveEqualizer.show();
-    }
-
-    public void createDeleteCustomSetSnacker() {
-        final int oldPos = binding.equalizerPresets.getSelectedItemPosition();
-        final String oldName = allSets.get(oldPos);
-        if (getEqualizerType(oldPos) == TYPE_CUSTOM) {
-
-            final MediaPlayer.Equalizer savedEqualizerSet = VLCOptions.getCustomSet(context, oldName);
-
-            Runnable cancelAction = new Runnable() {
-                @Override
-                public void run() {
-                    VLCOptions.saveCustomSet(context, savedEqualizerSet, oldName);
-                    mEqualizer = savedEqualizerSet;
-                    allSets.add(oldPos, oldName);
-                    customCount++;
-                    binding.equalizerPresets.setSelection(oldPos);
-                }
-            };
-
-            VLCOptions.deleteCustomSet(context, oldName);
-            allSets.remove(oldName);
-            customCount--;
-            mState.update(0, true);
-            binding.equalizerPresets.setSelection(0);
-            String message = context.getString(R.string.custom_set_deleted_message, oldName);
-            UiTools.snackerWithCancel(binding.getRoot(), message, null, cancelAction);
-        }
-    }
-
-    public void revertCustomSetChanges() {
-        final int pos = binding.equalizerPresets.getSelectedItemPosition();
-
-        final MediaPlayer.Equalizer temporarySet = MediaPlayer.Equalizer.create();
-        temporarySet.setPreAmp(mEqualizer.getPreAmp());
-        for (int i=0; i< MediaPlayer.Equalizer.getBandCount(); i++)
-            temporarySet.setAmp(i, mEqualizer.getAmp(i));
-
-        Runnable cancelAction = new Runnable() {
-            @Override
-            public void run() {
-                mState.update(pos, false);
-                mEqualizer = temporarySet;
-                updateAlreadyHandled = true;
-                if (pos == revertPos)
-                    updateEqualizer(pos);
-                else
-                    binding.equalizerPresets.setSelection(pos);
-            }
-        };
-        mState.update(revertPos, true);
-        if (pos == revertPos)
-            updateEqualizer(revertPos);
-        else
-            binding.equalizerPresets.setSelection(revertPos);
-
-        String message = getEqualizerType(pos) == TYPE_CUSTOM
-                ? context.getString(R.string.custom_set_restored)
-                : context.getString(R.string.unsaved_set_deleted_message);
-        UiTools.snackerWithCancel(binding.getRoot(), message, null, cancelAction);
-    }
-
-    private void updateEqualizer(int pos) {
-        if (updateAlreadyHandled) {
-            updateAlreadyHandled = false;
-        } else {
-            if (getEqualizerType(pos) == TYPE_PRESET) {
-                mEqualizer = MediaPlayer.Equalizer.createFromPreset(pos);
-                mState.update(pos, true);
-            } else if (getEqualizerType(pos) == TYPE_CUSTOM) {
-                mEqualizer = VLCOptions.getCustomSet(context, allSets.get(pos));
-                mState.update(pos, true);
-            } else if (getEqualizerType(pos) == TYPE_NEW) {
-                mEqualizer = MediaPlayer.Equalizer.create();
-                mState.update(pos, false);
-            }
-        }
-
-        binding.equalizerPreamp.setProgress((int) mEqualizer.getPreAmp() + 20);
-        for (int i = 0; i < BAND_COUNT; ++i) {
-            EqualizerBar bar = (EqualizerBar) binding.equalizerBands.getChildAt(i);
-            if (bar != null)
-                bar.setValue(mEqualizer.getAmp(i));
-        }
-        if (binding.equalizerButton.isChecked())
-            mService.setEqualizer(mEqualizer);
-    }
-
-    private int getEqualizerType(int position) {
-        if (position < 0)
-            return -1;
-        if (position < presetCount)
-            return TYPE_PRESET;
-        if (position < presetCount + customCount)
-            return TYPE_CUSTOM;
-        return TYPE_NEW;
-    }
-
-    public class EqualizerState {
-
-        boolean saved = true;
-        public ObservableInt saveButtonVisibility = new ObservableInt(View.INVISIBLE);
-        public ObservableInt revertButtonVisibility = new ObservableInt(View.INVISIBLE);
-        public ObservableInt deleteButtonVisibility = new ObservableInt(View.INVISIBLE);
-
-        public void update(int newPos, boolean newSaved) {
-            saved = newSaved;
-            saveButtonVisibility.set(newSaved ? View.INVISIBLE : View.VISIBLE);
-            revertButtonVisibility.set(newSaved ? View.INVISIBLE : View.VISIBLE);
-            deleteButtonVisibility.set(newSaved && getEqualizerType(newPos) == TYPE_CUSTOM ? View.VISIBLE : View.INVISIBLE);
-        }
     }
 }

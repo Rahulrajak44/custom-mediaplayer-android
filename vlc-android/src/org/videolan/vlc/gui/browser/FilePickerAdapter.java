@@ -23,22 +23,35 @@
 
 package org.videolan.vlc.gui.browser;
 
+import org.videolan.medialibrary.media.MediaLibraryItem;
 import org.videolan.medialibrary.media.MediaWrapper;
+
+import static org.videolan.medialibrary.media.MediaLibraryItem.TYPE_MEDIA;
 
 public class FilePickerAdapter extends BaseBrowserAdapter {
 
-    FilePickerAdapter(BaseBrowserFragment fragment) {
+    public FilePickerAdapter(BaseBrowserFragment fragment) {
         super(fragment);
     }
 
+    public void addItem(MediaLibraryItem media, boolean top){
+        if (media.getItemType() != TYPE_MEDIA)
+            return;
+        if (filter((MediaWrapper) media))
+            super.addItem(media, top);
+    }
+
     public void onBindViewHolder(final ViewHolder holder, int position) {
-        if (holder instanceof MediaViewHolder) {
-            final MediaViewHolder vh = (MediaViewHolder) holder;
-            final MediaWrapper media = (MediaWrapper) getItem(position);
-            vh.binding.setItem(media);
-            vh.binding.setHasContextMenu(false);
-            vh.binding.setProtocol(null);
-            vh.binding.setCover(getIcon(media, false));
-        }
+        final MediaViewHolder vh = (MediaViewHolder) holder;
+        final MediaWrapper media = (MediaWrapper) getItem(position);
+        vh.binding.setItem(media);
+        vh.binding.setHasContextMenu(false);
+        vh.binding.setProtocol(null);
+        vh.binding.setCover(getIcon(media));
+    }
+
+    //TODO update with different filter types in other cases than subtitles selection
+    private boolean filter(MediaWrapper mediaWrapper) {
+        return mediaWrapper.getType() == MediaWrapper.TYPE_DIR || mediaWrapper.getType() == MediaWrapper.TYPE_SUBTITLE;
     }
 }

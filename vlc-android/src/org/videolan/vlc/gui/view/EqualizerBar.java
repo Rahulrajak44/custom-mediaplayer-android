@@ -23,6 +23,7 @@ package org.videolan.vlc.gui.view;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.os.Build;
+import android.support.v4.content.ContextCompat;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.widget.LinearLayout;
@@ -44,21 +45,25 @@ public class EqualizerBar extends LinearLayout {
     private TextView mValue;
     private OnEqualizerBarChangeListener listener;
 
-    public EqualizerBar(Context context, float band) {
+    public EqualizerBar(Context context, float band, int colorAccent) {
         super(context);
-        init(context, band);
+        init(context, band, colorAccent);
     }
 
     public EqualizerBar(Context context, AttributeSet attrs) {
         super(context, attrs);
-        init(context, 0);
+        init(context, 0, ContextCompat.getColor(context, R.color.grey));
     }
 
     @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
-    private void init(Context context, float band) {
+    private void init(Context context, float band, int color) {
         LayoutInflater.from(context).inflate(R.layout.equalizer_bar, this, true);
 
         mSeek = (VerticalSeekBar) findViewById(R.id.equalizer_seek);
+
+        mSeek.getProgressDrawable().setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN);
+        mSeek.getThumb().setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN);
+
         //Force LTR to fix VerticalSeekBar background problem with RTL layout
         if (AndroidUtil.isJellyBeanMR1OrLater){
             mSeek.setLayoutDirection(LAYOUT_DIRECTION_LTR);
@@ -86,12 +91,8 @@ public class EqualizerBar extends LinearLayout {
         public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
             float value = (progress - RANGE) / (float) PRECISION;
             mValue.setText(value + " dB");
-            if (listener != null) {
-                // HACK:    VerticalSeekBar programmatically calls onProgress
-                //          fromUser will always be false
-                //          So use custom getFromUser() instead of fromUser
-                listener.onProgressChanged(value, getFromUser());
-            }
+            if (listener != null)
+                listener.onProgressChanged(value);
         }
     };
 
@@ -101,9 +102,5 @@ public class EqualizerBar extends LinearLayout {
 
     public void setListener(OnEqualizerBarChangeListener listener) {
         this.listener = listener;
-    }
-
-    private boolean getFromUser() {
-        return mSeek.getFromUser();
     }
 }

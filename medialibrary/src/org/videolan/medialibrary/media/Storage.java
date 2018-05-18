@@ -4,7 +4,6 @@ package org.videolan.medialibrary.media;
 import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.text.TextUtils;
 
 public class Storage extends MediaLibraryItem {
 
@@ -68,10 +67,5 @@ public class Storage extends MediaLibraryItem {
         super(in);
         this.uri = in.readParcelable(Uri.class.getClassLoader());
         this.description = in.readString();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        return obj instanceof Storage && TextUtils.equals(mTitle, ((Storage)obj).getTitle());
     }
 }

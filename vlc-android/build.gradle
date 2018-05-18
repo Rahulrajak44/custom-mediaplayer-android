@@ -1,18 +1,24 @@
 apply plugin: 'com.android.application'
-apply plugin: 'kotlin-android'
-apply plugin: 'kotlin-kapt'
 
 android {
     packagingOptions {
+        pickFirst 'lib/armeabi-v7a/libc++_shared.so'
+        pickFirst 'lib/armeabi/libc++_shared.so'
+        pickFirst 'lib/arm64-v8a/libc++_shared.so'
+        pickFirst 'lib/x86/libc++_shared.so'
+        pickFirst 'lib/x86_64/libc++_shared.so'
+        pickFirst 'lib/mips/libc++_shared.so'
+        pickFirst 'lib/mips64/libc++_shared.so'
     }
 
     dexOptions {
         maxProcessCount 8
-        javaMaxHeapSize "2g"
+        javaMaxHeapSize "1g"
         preDexLibraries true
     }
 
     compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
 
     flavorDimensions "target", "abi"
 
@@ -36,7 +42,9 @@ android {
     dataBinding {
         enabled = true
     }
-
+    dexOptions {
+        javaMaxHeapSize "4g"
+    }
     defaultConfig {
         applicationId "org.videolan.vlc"
 
@@ -50,47 +58,41 @@ android {
         versionCode rootProject.ext.versionCode
         versionName rootProject.ext.versionName
 
+        multiDexEnabled=true
+
         tasks.whenTaskAdded { task ->
             if (task.name.startsWith('merge')) {
                 task.dependsOn luaPlaylistCopy
                 task.dependsOn luaMetaCopy
             }
         }
-    }
 
-    signingConfigs {
-        release {
-            /*
-            To set this properties, create file gradle.properties with these 3 props.
-            e.g.
-            keyStoreFile=/home/<username>/.android/debug.keystore
-            storealias=androiddebugkey
-            storepwd=android
-             */
-            storeFile file(keyStoreFile)
-            keyAlias storealias
-            if (System.getenv('PASSWORD_KEYSTORE') != null && !System.getenv('PASSWORD_KEYSTORE').isEmpty()){
-                storePassword = System.getenv('PASSWORD_KEYSTORE')
-                keyPassword = System.getenv('PASSWORD_KEYSTORE')
-            } else {
-                storePassword storepwd
-                keyPassword storepwd
+        //Set the build ABI according to build types only if not launched from compile.sh
+        if (System.getenv('CLI') == null)
+            tasks.whenTaskAdded { task ->
+                if (task.name.startsWith('assemble')) {
+                    if (task.name.endsWith('ARMv7Debug'))
+                        task.dependsOn(":libvlc:buildDebugARMv7")
+                    else if (task.name.endsWith('ARMv8Debug'))
+                        task.dependsOn(":libvlc:buildDebugARM64")
+                    else if (task.name.endsWith('X86Debug'))
+                        task.dependsOn(":libvlc:buildDebugx86")
+                    else if (task.name.endsWith('X86_64Debug'))
+                        task.dependsOn(":libvlc:buildDebugx86_64")
+                    else if (task.name.endsWith('MIPSDebug'))
+                        task.dependsOn(":libvlc:buildDebugMIPS")
+                    else if (task.name.endsWith('MIPS64Debug'))
+                        task.dependsOn(":libvlc:buildDebugMIPS64")
+                }
             }
-        }
     }
 
     buildTypes {
         release {
             signingConfig null
-            minifyEnabled true
+            minifyEnabled false
             shrinkResources false
             proguardFile 'proguard.cfg'
-            kotlinOptions.freeCompilerArgs = [ 'Xno-param-assertions']
-        }
-        signedRelease {
-            initWith release
-            signingConfig = signingConfigs.release
-            matchingFallbacks = ['release']
         }
         debug {
             applicationIdSuffix ".debug"
@@ -101,6 +103,11 @@ android {
         vanilla {
             dimension "target"
             versionCode = 1
+        }
+        chrome {
+            minSdkVersion 19
+            dimension "target"
+            versionCode = 2
         }
         ARMv7 {
             dimension "abi"
@@ -130,24 +137,16 @@ android {
 
     // make per-variant version code
     applicationVariants.all { variant ->
+        // set the composite code
+        variant.mergedFlavor.versionCode = variant.productFlavors.get(0).versionCode * 10000000 + defaultConfig.versionCode + variant.productFlavors.get(1).versionCode
 
-        def generatedCode = variant.productFlavors.get(0).versionCode * 10000000 + defaultConfig.versionCode + variant.productFlavors.get(1).versionCode
-        variant.mergedFlavor.versionCode = generatedCode
         //Custom APK name
-        variant.outputs.all { output ->
+        variant.outputs.each { output ->
             def outputName = "VLC-Android-"
             if (variant.productFlavors.get(0).name != "vanilla")
                 outputName += variant.productFlavors.get(0).name.toUpperCase() + "-"
             outputName += variant.versionName + "-" + variant.productFlavors.get(1).name + ".apk"
-            outputFileName = outputName
-            output.processManifest.doLast {
-                // set the composite code
-                String manifestPath = "$manifestOutputDirectory/AndroidManifest.xml"
-                def manifestContent = file(manifestPath).getText()
-                manifestContent = manifestContent.replace('android:versionCode="1"',
-                        String.format('android:versionCode="%s"', generatedCode))
-                file(manifestPath).write(manifestContent)
-            }
+            output.outputFile = new File(output.outputFile.parentFile, outputName);
         }
     }
 
@@ -169,6 +168,10 @@ android {
     sourceSets.test {
         java.srcDirs = ['test']
     }
+    sourceSets.chrome {
+        manifest.srcFile 'flavors/chrome/AndroidManifest.xml'
+        res.srcDirs = ['flavors/chrome/res']
+    }
 }
 
 task generateSources (type: Jar) {
@@ -177,34 +180,28 @@ task generateSources (type: Jar) {
 }
 
 dependencies {
-    implementation project(':libvlc')
-    implementation project(':medialibrary')
-    implementation project(':api')
-    implementation project(':axmlrpc')
-    // AppCompat
-    implementation "com.android.support:recyclerview-v7:$rootProject.ext.appCompatVersion"
-    implementation "com.android.support:design:$rootProject.ext.appCompatVersion"
-    implementation "com.android.support:support-annotations:$rootProject.ext.appCompatVersion"
-    implementation "com.android.support:preference-v7:$rootProject.ext.appCompatVersion"
-    implementation "com.android.support:leanback-v17:$rootProject.ext.appCompatVersion"
-    implementation "com.android.support:preference-leanback-v17:$rootProject.ext.appCompatVersion"
-    implementation "com.android.support.constraint:constraint-layout:$rootProject.ext.constraintLayoutVersion"
-    testImplementation 'junit:junit:4.12'
-    // Kotlin
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    kapt "com.android.databinding:compiler:$rootProject.ext.android_plugin_version"
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$rootProject.ext.kotlinx_version"
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$rootProject.ext.kotlinx_version"
-    implementation "android.arch.lifecycle:extensions:$rootProject.ext.archVersion"
-    kapt "android.arch.lifecycle:compiler:$rootProject.ext.archVersion"
-    implementation project(':tools')
+    compile project(':libvlc')
+    compile project(':medialibrary')
+    compile project(':api')
+    compile project(':axmlrpc')
+    compile project(':appsgeysersdk')
+    compile 'com.google.android.gms:play-services-ads:11.0.2'
+    compile 'com.google.android.gms:play-services-gcm:11.0.2'
+    compile 'com.google.android.gms:play-services-location:11.0.2'
+
+    compile 'com.android.support:multidex:1.0.1'
+
+    compile "com.android.support:recyclerview-v7:$rootProject.ext.appCompatVersion"
+    compile "com.android.support:design:$rootProject.ext.appCompatVersion"
+    compile "com.android.support:support-annotations:$rootProject.ext.appCompatVersion"
+    compile "com.android.support:preference-v7:$rootProject.ext.appCompatVersion"
+    compile "com.android.support:preference-leanback-v17:$rootProject.ext.appCompatVersion"
+    compile "com.android.support.constraint:constraint-layout:$rootProject.ext.constraintLayoutVersion"
+    compile "com.android.support:cardview-v7:$rootProject.ext.appCompatVersion"
+    testCompile 'junit:junit:4.12'
 }
 
-kotlin {
-    experimental {
-        coroutines "enable"
-    }
-}
+
 
 static def buildTime() {
     return new Date().format("yyyy-MM-dd", TimeZone.getTimeZone("UTC"))
@@ -216,10 +213,10 @@ static def hostName() {
 
 def revision() {
     def code = new ByteArrayOutputStream()
-    exec {
+    /*exec {
         commandLine 'git', 'rev-parse', '--short', 'HEAD'
         standardOutput = code
-    }
+    }*/
     return code.toString()
 }
 

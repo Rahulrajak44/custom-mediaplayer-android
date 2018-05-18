@@ -25,19 +25,21 @@ package org.videolan.vlc.gui.tv.preferences;
 
 import android.annotation.TargetApi;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
-import android.support.v4.app.FragmentActivity;
 import android.view.MenuItem;
+import android.view.Window;
+import android.view.WindowManager;
 
 import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
+import org.videolan.vlc.VLCApplication;
+import org.videolan.vlc.config.Config;
+import org.videolan.vlc.gui.BaseActivity;
 
 @SuppressWarnings("deprecation")
 @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
-public class PreferencesActivity extends FragmentActivity implements PlaybackService.Client.Callback {
+public class PreferencesActivity extends BaseActivity implements PlaybackService.Client.Callback {
 
     public final static String TAG = "VLC/PreferencesActivity";
 
@@ -84,11 +86,13 @@ public class PreferencesActivity extends FragmentActivity implements PlaybackSer
     }
 
     private void applyTheme() {
-        SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(this);
-        boolean enableBlackTheme = pref.getBoolean("enable_black_theme", false);
-        if (enableBlackTheme) {
-            setTheme(R.style.Theme_VLC_Black);
-        }
+        Config config = ((VLCApplication)getApplication()).getConfig();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            Window window = getWindow();
+            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            window.setStatusBarColor(config.getColorPrimaryDark());
+        };
     }
 
     @Override

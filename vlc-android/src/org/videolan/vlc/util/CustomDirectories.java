@@ -20,7 +20,6 @@
 
 package org.videolan.vlc.util;
 
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 
@@ -28,14 +27,13 @@ import org.videolan.vlc.VLCApplication;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 public class CustomDirectories {
 
     public static void addCustomDirectory(String path) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(VLCApplication.getAppContext());
 
-        List<String> dirs = new ArrayList<String>(
+        ArrayList<String> dirs = new ArrayList<String>(
                 Arrays.asList(CustomDirectories.getCustomDirectories()));
         dirs.add(path);
         StringBuilder builder = new StringBuilder();
@@ -53,7 +51,7 @@ public class CustomDirectories {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(VLCApplication.getAppContext());
         if (!preferences.getString("custom_paths", "").contains(path))
             return;
-        List<String> dirs = new ArrayList<String>(
+        ArrayList<String> dirs = new ArrayList<String>(
                 Arrays.asList(preferences.getString("custom_paths", "").split(
                         ":")));
         dirs.remove(path);
@@ -75,11 +73,7 @@ public class CustomDirectories {
     }
 
     public static String[] getCustomDirectories() {
-        return getCustomDirectories(VLCApplication.getAppContext());
-    }
-
-    public static String[] getCustomDirectories(Context ctx) {
-        final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(ctx);
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(VLCApplication.getAppContext());
         final String custom_paths = preferences.getString("custom_paths", "");
         if (custom_paths.equals(""))
             return new String[0];

@@ -23,6 +23,7 @@
 package org.videolan.vlc.gui.dialogs;
 
 import android.os.Bundle;
+import android.support.v4.app.DialogFragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -39,8 +40,20 @@ public class SleepTimerDialog extends PickTimeFragment {
         super();
     }
 
-    public static SleepTimerDialog newInstance() {
-        return new SleepTimerDialog();
+    public static SleepTimerDialog newInstance(int theme) {
+        SleepTimerDialog myFragment = new SleepTimerDialog();
+
+        Bundle args = new Bundle();
+        args.putInt("theme", theme);
+        myFragment.setArguments(args);
+
+        return myFragment;
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setStyle(DialogFragment.STYLE_NO_FRAME, getArguments().getInt("theme"));
     }
 
     @Override
@@ -59,7 +72,7 @@ public class SleepTimerDialog extends PickTimeFragment {
 
         if (interval < ONE_DAY_IN_MILLIS) {
             Calendar sleepTime = Calendar.getInstance();
-            sleepTime.setTimeInMillis(sleepTime.getTimeInMillis() + interval);
+            sleepTime.setTimeInMillis(Calendar.getInstance().getTimeInMillis() + interval);
             sleepTime.set(Calendar.SECOND, 0);
             AdvOptionsDialog.setSleep(sleepTime);
         }

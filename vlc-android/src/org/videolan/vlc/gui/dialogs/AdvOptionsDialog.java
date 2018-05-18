@@ -25,7 +25,6 @@ package org.videolan.vlc.gui.dialogs;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlarmManager;
-import android.app.Dialog;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -33,9 +32,11 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.TypedArray;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.v4.app.DialogFragment;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.preference.PreferenceManager;
 import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -52,31 +53,26 @@ import org.videolan.libvlc.MediaPlayer;
 import org.videolan.vlc.PlaybackService;
 import org.videolan.vlc.R;
 import org.videolan.vlc.VLCApplication;
-import org.videolan.vlc.gui.PlaybackServiceActivity;
+import org.videolan.vlc.gui.PlaybackServiceFragment;
 import org.videolan.vlc.gui.audio.EqualizerFragment;
 import org.videolan.vlc.gui.helpers.UiTools;
 import org.videolan.vlc.gui.video.VideoPlayerActivity;
 import org.videolan.vlc.gui.view.AutoFitRecyclerView;
 import org.videolan.vlc.interfaces.IPlaybackSettingsController;
 import org.videolan.vlc.util.AndroidDevices;
-import org.videolan.vlc.util.Constants;
 import org.videolan.vlc.util.Strings;
-import org.videolan.vlc.util.VLCOptions;
 
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.List;
 
 public class AdvOptionsDialog extends DialogFragment implements View.OnClickListener, PlaybackService.Client.Callback, View.OnFocusChangeListener, DialogInterface.OnKeyListener {
 
     public final static String TAG = "VLC/AdvOptionsDialog";
     public static final String MODE_KEY = "mode";
-    public static final String PRIMARY_DISPLAY = "primary_display";
-    public static final String PASSTHROUGH = "passthrough";
     public static final int MODE_VIDEO = 0;
     public static final int MODE_AUDIO = 1;
 
-    private static final int SPAN_COUNT = 4;
+    private static final int SPAN_COUNT = 3;
 
     public static final int ACTION_AUDIO_DELAY = 2 ;
     public static final int ACTION_SPU_DELAY = 3 ;
@@ -94,19 +90,16 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
     private static final int ID_POPUP_VIDEO = 9 ;
     private static final int ID_REPEAT = 10 ;
     private static final int ID_SHUFFLE = 11 ;
-    private static final int ID_PASSTHROUGH = 12 ;
 
     private Activity mActivity;
+    private int mTheme;
     private int mMode = -1;
-    private boolean mPrimary;
-    private boolean mPassthrough;
 
     AutoFitRecyclerView mRecyclerView;
     private AdvOptionsAdapter mAdapter;
 
     private TextView mPlaybackSpeed;
     private TextView mSleep;
-    private TextView mPassThrough;
 
     private TextView mJumpTitle;
 
@@ -118,7 +111,6 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
 
     private TextView mChaptersTitle;
     private int mTextColor;
-    private PlaybackServiceActivity.Helper mHelper;
     private PlaybackService mService;
 
     private IPlaybackSettingsController mPlaybackController;
@@ -132,14 +124,15 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
         super.onCreate(savedInstanceState);
         if (VLCApplication.sPlayerSleepTime != null && VLCApplication.sPlayerSleepTime.before(Calendar.getInstance()))
             VLCApplication.sPlayerSleepTime = null;
-        final Bundle args = getArguments();
-        if (args != null) {
-            mMode = args.containsKey(MODE_KEY) ? args.getInt(MODE_KEY) : MODE_VIDEO;
-            mPrimary = args.containsKey(PRIMARY_DISPLAY) && args.getBoolean(PRIMARY_DISPLAY);
-            mPassthrough = args.getBoolean(PASSTHROUGH);
-        }
-        setStyle(DialogFragment.STYLE_NO_FRAME, 0);
-        mHelper = new PlaybackServiceActivity.Helper(getActivity(), this);
+        if (getArguments() != null && getArguments().containsKey(MODE_KEY))
+            mMode = getArguments().getInt(MODE_KEY);
+        else
+            mMode = MODE_VIDEO;
+
+        mTheme = (mMode == MODE_VIDEO || UiTools.isBlackThemeEnabled()) ?
+                R.style.Theme_VLC_Black :
+                R.style.Theme_VLC;
+        setStyle(DialogFragment.STYLE_NO_FRAME, mTheme);
     }
 
     @Override
@@ -149,11 +142,12 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
     }
 
     @Override
-    public void onAttach(Context context) {
-        super.onAttach(context);
-        if (mMode == MODE_VIDEO)
-            mPlaybackController = (IPlaybackSettingsController) context;
-        mActivity = (Activity) context;
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+        if (mMode == MODE_VIDEO) {
+            mPlaybackController = (IPlaybackSettingsController) activity;
+        }
+        mActivity = activity;
     }
 
     @Override
@@ -180,10 +174,12 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
         mToast.setGravity(Gravity.TOP,0,100);
 
         //Get default color
-        final int[] attrs = new int[] { android.R.attr.textColorSecondary };
-        final TypedArray a = getActivity().getTheme().obtainStyledAttributes(R.style.Theme_VLC, attrs);
+        int[] attrs = new int[] { android.R.attr.textColorSecondary };
+        TypedArray a = getActivity().getTheme().obtainStyledAttributes(R.style.Theme_VLC, attrs);
         mTextColor = a.getColor(0, Color.LTGRAY);
         a.recycle();
+
+        getDialog().getWindow().setBackgroundDrawableResource(UiTools.getResourceFromAttribute(getActivity(), R.attr.rounded_bg));
 
         return mRecyclerView;
     }
@@ -194,24 +190,39 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
         getDialog().setOnKeyListener(this);
     }
 
+    private void setDialogDimensions(int offset) {
+        if (getDialog() == null)
+            return;
+        int dialogWidth = getResources().getDimensionPixelSize(R.dimen.option_width) * SPAN_COUNT + mRecyclerView.getPaddingLeft()+ mRecyclerView.getRight();
+
+        int count = mAdapter.getItemCount()-offset;
+        int rows = offset + count / SPAN_COUNT;
+        if (count % SPAN_COUNT != 0)
+            rows++;
+
+        int dialogHeight = getResources().getDimensionPixelSize(R.dimen.option_height) * rows + mRecyclerView.getPaddingBottom()+ mRecyclerView.getPaddingTop();
+
+        getDialog().getWindow().setLayout(dialogWidth, dialogHeight);
+    }
+
     private void showFragment(int id) {
         DialogFragment newFragment;
         String tag;
         switch (id) {
             case ID_PLAYBACK_SPEED:
-                newFragment = PlaybackSpeedDialog.newInstance();
+                newFragment = PlaybackSpeedDialog.newInstance(mTheme);
                 tag = "playback_speed";
                 break;
             case ID_JUMP_TO:
-                newFragment = JumpToTimeDialog.newInstance();
+                newFragment = JumpToTimeDialog.newInstance(mTheme);
                 tag = "time";
                 break;
             case ID_SLEEP:
-                newFragment = SleepTimerDialog.newInstance();
+                newFragment = SleepTimerDialog.newInstance(mTheme);
                 tag = "time";
                 break;
             case ID_CHAPTER_TITLE:
-                newFragment = SelectChapterDialog.newInstance();
+                newFragment = SelectChapterDialog.newInstance(mTheme);
                 tag = "select_chapter";
                 break;
             case ID_EQUALIZER:
@@ -219,13 +230,14 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
                 tag = "equalizer";
                 break;
             case ID_SAVE_PLAYLIST:
-                UiTools.savePlaylist(getActivity(), mService.getMedias());
+                UiTools.addToPlaylist(getActivity(), mService.getMedias());
                 dismiss();
                 return;
             default:
                 return;
         }
-        newFragment.show(getActivity().getSupportFragmentManager(), tag);
+        if (newFragment != null)
+            newFragment.show(getActivity().getSupportFragmentManager(), tag);
         dismiss();
     }
 
@@ -248,14 +260,16 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
     }
 
     public static void setSleep(Calendar time) {
-        final AlarmManager alarmMgr = (AlarmManager) VLCApplication.getAppContext().getSystemService(Context.ALARM_SERVICE);
-        final Intent intent = new Intent(VLCApplication.SLEEP_INTENT);
-        final PendingIntent sleepPendingIntent = PendingIntent.getBroadcast(VLCApplication.getAppContext(), 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        AlarmManager alarmMgr = (AlarmManager) VLCApplication.getAppContext().getSystemService(Context.ALARM_SERVICE);
+        Intent intent = new Intent(VLCApplication.SLEEP_INTENT);
+        PendingIntent sleepPendingIntent = PendingIntent.getBroadcast(VLCApplication.getAppContext(), 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
 
-        if (time != null)
+        if (time != null) {
             alarmMgr.set(AlarmManager.RTC_WAKEUP, time.getTimeInMillis(), sleepPendingIntent);
-        else
+        }
+        else {
             alarmMgr.cancel(sleepPendingIntent);
+        }
         VLCApplication.sPlayerSleepTime = time;
     }
 
@@ -273,6 +287,11 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
         } else {
             mPlaybackSpeed.setText(Strings.formatRateString(mService.getRate()));
             mPlaybackSpeed.setCompoundDrawablesWithIntrinsicBounds(0, R.drawable.ic_speed_on, 0, 0);
+            for (Drawable drawable: mPlaybackSpeed.getCompoundDrawables()){
+                if(drawable != null) {
+                    drawable.setColorFilter(((VLCApplication) getActivity().getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+                }
+            }
         }
     }
 
@@ -284,13 +303,18 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
                     0, 0);
         } else {
             mSleep.setCompoundDrawablesWithIntrinsicBounds(0, R.drawable.ic_sleep_on, 0, 0);
+            for (Drawable drawable: mSleep.getCompoundDrawables()){
+                if(drawable != null) {
+                    drawable.setColorFilter(((VLCApplication) getActivity().getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+                }
+            }
             text = DateFormat.getTimeFormat(mActivity).format(VLCApplication.sPlayerSleepTime.getTime());
         }
         mSleep.setText(text);
     }
 
     private void initSpuDelay() {
-        final long spudelay = mService.getSpuDelay() / 1000L;
+        long spudelay = mService.getSpuDelay() / 1000L;
         if (spudelay == 0L) {
             mSpuDelay.setText(null);
             mSpuDelay.setCompoundDrawablesWithIntrinsicBounds(0,
@@ -299,13 +323,18 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
         } else {
             mSpuDelay.setText(String.format("%s ms", Long.toString(spudelay)));
             mSpuDelay.setCompoundDrawablesWithIntrinsicBounds(0,
-                    R.drawable.ic_subtitledelay_on,
+                    R.drawable.ic_subtitledelay_normal_o,
                     0, 0);
+            for (Drawable drawable: mSpuDelay.getCompoundDrawables()){
+                if(drawable != null) {
+                    drawable.setColorFilter(((VLCApplication) getActivity().getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+                }
+            }
         }
     }
 
     private void initAudioDelay() {
-        final long audiodelay = mService.getAudioDelay() / 1000L;
+        long audiodelay = mService.getAudioDelay() / 1000L;
         if (audiodelay == 0L) {
             mAudioDelay.setText(null);
             mAudioDelay.setCompoundDrawablesWithIntrinsicBounds(0,
@@ -316,47 +345,77 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
             mAudioDelay.setCompoundDrawablesWithIntrinsicBounds(0,
                     R.drawable.ic_audiodelay_on,
                     0, 0);
+            for (Drawable drawable: mAudioDelay.getCompoundDrawables()){
+                if(drawable != null) {
+                    drawable.setColorFilter(((VLCApplication) getActivity().getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+                }
+            }
         }
     }
 
     public void initRepeat() {
         switch (mService.getRepeatType()) {
-            case Constants.REPEAT_NONE:
+            case PlaybackService.REPEAT_NONE:
                 mRepeat.setCompoundDrawablesWithIntrinsicBounds(0,
                         UiTools.getResourceFromAttribute(mActivity, R.attr.ic_repeat),
                         0, 0);
                 break;
-            case Constants.REPEAT_ALL:
+            case PlaybackService.REPEAT_ALL:
                 mRepeat.setCompoundDrawablesWithIntrinsicBounds(0, R.drawable.ic_repeat_all, 0, 0);
+                for (Drawable drawable: mRepeat.getCompoundDrawables()){
+                    if(drawable != null) {
+                        drawable.setColorFilter(((VLCApplication) getActivity().getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+                    }
+                }
                 break;
-            case Constants.REPEAT_ONE:
+            case PlaybackService.REPEAT_ONE:
                 mRepeat.setCompoundDrawablesWithIntrinsicBounds(0, R.drawable.ic_repeat_one, 0, 0);
-                break;
+                for (Drawable drawable: mRepeat.getCompoundDrawables()){
+                    if(drawable != null) {
+                        drawable.setColorFilter(((VLCApplication) getActivity().getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+                    }
+                }
+                    break;
         }
     }
 
     public void setRepeatMode() {
         switch (mService.getRepeatType()) {
-            case Constants.REPEAT_NONE:
+            case PlaybackService.REPEAT_NONE:
                 mRepeat.setCompoundDrawablesWithIntrinsicBounds(0, R.drawable.ic_repeat_one, 0, 0);
-                mService.setRepeatType(Constants.REPEAT_ONE);
+                for (Drawable drawable: mRepeat.getCompoundDrawables()){
+                    if(drawable != null) {
+                        drawable.setColorFilter(((VLCApplication) getActivity().getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+                    }
+                }
+                mService.setRepeatType(PlaybackService.REPEAT_ONE);
                 break;
-            case Constants.REPEAT_ONE:
+            case PlaybackService.REPEAT_ONE:
                 if (mService.hasPlaylist()){
                     mRepeat.setCompoundDrawablesWithIntrinsicBounds(0, R.drawable.ic_repeat_all, 0, 0);
-                    mService.setRepeatType(Constants.REPEAT_ALL);
+                    for (Drawable drawable: mRepeat.getCompoundDrawables()){
+                        if(drawable != null) {
+                            drawable.setColorFilter(((VLCApplication) getActivity().getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+                        }
+                    }
+                    mService.setRepeatType(PlaybackService.REPEAT_ALL);
                 } else {
                     mRepeat.setCompoundDrawablesWithIntrinsicBounds(0,
                             UiTools.getResourceFromAttribute(mActivity, R.attr.ic_repeat),
                             0, 0);
-                    mService.setRepeatType(Constants.REPEAT_NONE);
+                    mService.setRepeatType(PlaybackService.REPEAT_NONE);
+                    for (Drawable drawable: mRepeat.getCompoundDrawables()){
+                        if(drawable != null) {
+                            drawable.setColorFilter(ContextCompat.getColor(getActivity(), R.color.white), android.graphics.PorterDuff.Mode.SRC_IN);
+                        }
+                    }
                 }
                 break;
-            case Constants.REPEAT_ALL:
+            case PlaybackService.REPEAT_ALL:
                 mRepeat.setCompoundDrawablesWithIntrinsicBounds(0,
                         UiTools.getResourceFromAttribute(mActivity, R.attr.ic_repeat),
                         0, 0);
-                mService.setRepeatType(Constants.REPEAT_NONE);
+                mService.setRepeatType(PlaybackService.REPEAT_NONE);
                 break;
         }
     }
@@ -367,20 +426,21 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
                         ? R.drawable.ic_shuffle_on
                         : UiTools.getResourceFromAttribute(mActivity, R.attr.ic_shuffle),
                 0, 0);
-    }
 
-    public void initPassthrough(){
-        final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(AdvOptionsDialog.this.getContext());
-        mPassThrough.setCompoundDrawablesWithIntrinsicBounds(0,
-                VLCOptions.isAudioDigitalOutputEnabled(prefs)
-                        ? R.drawable.ic_passthrough_on
-                        : UiTools.getResourceFromAttribute(mActivity, R.attr.ic_passthrough),
-                0, 0);
+        for (Drawable drawable: mShuffle.getCompoundDrawables()){
+            if(drawable != null) {
+                if(mService.isShuffling()) {
+                    drawable.setColorFilter(((VLCApplication) getActivity().getApplication()).getConfig().getColorAccent(), android.graphics.PorterDuff.Mode.SRC_IN);
+                }else {
+                    drawable.setColorFilter(ContextCompat.getColor(getActivity(), R.color.white), android.graphics.PorterDuff.Mode.SRC_IN);
+                }
+            }
+        }
     }
 
     private void initChapters() {
         final MediaPlayer.Chapter[] chapters = mService.getChapters(-1);
-        if (chapters == null) return;
+
         int index = mService.getChapterIdx();
         if (chapters[index].name == null || chapters[index].name.equals(""))
             mChaptersTitle.setText(String.format("%s %d", getResources().getString(R.string.chapter), index));
@@ -431,10 +491,6 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
                 mShuffle = tv;
                 initShuffle();
                 break;
-            case ID_PASSTHROUGH:
-                mPassThrough = tv;
-                initPassthrough();
-                break;
         }
     }
 
@@ -453,7 +509,7 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
                 }
                 break;
             case ID_PLAYBACK_SPEED:
-                showFragment(ID_PLAYBACK_SPEED);
+                    showFragment(ID_PLAYBACK_SPEED);
                 break;
             case ID_CHAPTER_TITLE:
                 showFragment(ID_CHAPTER_TITLE);
@@ -486,30 +542,14 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
                 mService.shuffle();
                 initShuffle();
                 break;
-            case ID_PASSTHROUGH: {
-                togglePassthrough();
-                break;
-            }
         }
-    }
-
-    private void togglePassthrough() {
-        final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(AdvOptionsDialog.this.getContext());
-        boolean enabled = !VLCOptions.isAudioDigitalOutputEnabled(prefs);
-        if (mService.setAudioDigitalOutputEnabled(enabled)) {
-            mPassThrough.setCompoundDrawablesWithIntrinsicBounds(0,
-                    enabled ? R.drawable.ic_passthrough_on
-                            : UiTools.getResourceFromAttribute(mActivity, R.attr.ic_passthrough)
-                    , 0, 0);
-            VLCOptions.setAudioDigitalOutputEnabled(prefs, enabled);
-            mToast.setText(enabled ? getString(R.string.audio_digital_output_enabled) : getString(R.string.audio_digital_output_disabled));
-        } else mToast.setText(R.string.audio_digital_failed);
-        mToast.show();
     }
 
     @Override
     public void onFocusChange(View v, boolean hasFocus) {
-        if (v instanceof TextView) ((TextView) v).setTextColor(v.hasFocus() ? UiTools.Resources.ITEM_FOCUS_ON : mTextColor);
+        if (v instanceof TextView)
+            ((TextView) v).setTextColor(v.hasFocus() ?
+                    ((VLCApplication)getActivity().getApplication()).getConfig().getColorAccent() : mTextColor);
         mToast.setText(mAdapter.getSelectedAdvOptionHelp());
         mToast.show();
     }
@@ -532,22 +572,21 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
     @Override
     public void onStart() {
         super.onStart();
-        mHelper.onStart();
+        PlaybackServiceFragment.registerPlaybackService(this, this);
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        mHelper.onStop();
+        PlaybackServiceFragment.unregisterPlaybackService(this, this);
     }
 
     @Override
     public void onConnected(PlaybackService service) {
         mAdapter.clear();
         mService = service;
-        boolean tvUi = VLCApplication.showTvUi();
         int large_items = 0;
-        final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(AdvOptionsDialog.this.getContext());
+        boolean tvUi = VLCApplication.showTvUi();
 
         mAdapter.addOption(new Option(ID_SLEEP, R.attr.ic_sleep_normal_style, getString(R.string.sleep_title)));
         mAdapter.addOption(new Option(ID_PLAYBACK_SPEED, R.attr.ic_speed_normal_style, getString(R.string.playback_speed)));
@@ -555,11 +594,11 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
         mAdapter.addOption(new Option(ID_EQUALIZER, R.attr.ic_equalizer_normal_style, getString(R.string.equalizer)));
 
         if (mMode == MODE_VIDEO) {
-            if (mPrimary && !tvUi && mService.getAudioTracksCount() > 0)
+            if (!tvUi)
                 mAdapter.addOption(new Option(ID_PLAY_AS_AUDIO, R.attr.ic_playasaudio_on, getString(R.string.play_as_audio)));
             mAdapter.addOption(new Option(ID_SPU_DELAY, R.attr.ic_subtitledelay, getString(R.string.spu_delay)));
             mAdapter.addOption(new Option(ID_AUDIO_DELAY, R.attr.ic_audiodelay, getString(R.string.audio_delay)));
-            if (mPrimary && (!tvUi || AndroidDevices.hasPiP) && !AndroidDevices.isDex(getActivity()))
+            if (!tvUi || AndroidDevices.hasPiP)
                 mAdapter.addOption(new Option(ID_POPUP_VIDEO, R.attr.ic_popup_dim, getString(R.string.popup_playback_title)));
             mAdapter.addOption(new Option(ID_REPEAT, R.attr.ic_repeat, getString(R.string.repeat_title)));
             if (mService.canShuffle())
@@ -569,13 +608,11 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
             final int chaptersCount = chapters != null ? chapters.length : 0;
             if (chaptersCount > 1) {
                 mAdapter.addOption(new Option(ID_CHAPTER_TITLE, R.attr.ic_chapter_normal_style, getString(R.string.go_to_chapter)));
-                ++large_items;
+                large_items++;
             }
         } else {
             mAdapter.addOption(new Option(ID_SAVE_PLAYLIST, R.attr.ic_save, getString(R.string.playlist_save)));
         }
-        if (mPassthrough && "0".equals(prefs.getString("aout", "0")))
-            mAdapter.addOption(new Option(ID_PASSTHROUGH, R.attr.ic_passthrough, getString(R.string.audio_digital_title)));
         setDialogDimensions(large_items);
     }
 
@@ -584,7 +621,7 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
         mService = null;
     }
 
-    final GridLayoutManager.SpanSizeLookup mSpanSizeLookup = new GridLayoutManager.SpanSizeLookup() {
+    GridLayoutManager.SpanSizeLookup mSpanSizeLookup = new GridLayoutManager.SpanSizeLookup() {
         @Override
         public int getSpanSize(int position) {
             switch (mAdapter.getItemViewType(position)) {
@@ -623,23 +660,12 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
         return false;
     }
 
-    private void setDialogDimensions(int offset) {
-        final Dialog dialog = getDialog();
-        if (dialog == null) return;
-        final int dialogWidth = getResources().getDimensionPixelSize(R.dimen.option_width) * SPAN_COUNT + mRecyclerView.getPaddingLeft()+ mRecyclerView.getRight();
-        final int count = mAdapter.getItemCount()-offset;
-        final int rows = offset + (count + SPAN_COUNT-1) / SPAN_COUNT;
-        final int dialogHeight = getResources().getDimensionPixelSize(R.dimen.option_height) * rows + mRecyclerView.getPaddingBottom()+ mRecyclerView.getPaddingTop();
-
-        dialog.getWindow().setLayout(dialogWidth, dialogHeight);
-    }
-
     private class AdvOptionsAdapter extends RecyclerView.Adapter<AdvOptionsAdapter.ViewHolder> {
 
-        private final List<Option> mList = new ArrayList<>();
+        private ArrayList<Option> mList = new ArrayList<>();
         private int mSelection = 0;
 
-        AdvOptionsAdapter() {
+        public AdvOptionsAdapter() {
             SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(AdvOptionsDialog.this.getContext());
             if (!(prefs.getBoolean("enable_volume_gesture",false) || prefs.getBoolean("enable_volume_gesture",false)))
                 mSelection = 0;
@@ -647,7 +673,7 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
 
         @Override
         public AdvOptionsAdapter.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-            final View v = LayoutInflater.from(parent.getContext())
+            View v = LayoutInflater.from(parent.getContext())
                     .inflate(R.layout.adv_option_item, parent, false);
             v.setOnClickListener(AdvOptionsDialog.this);
             v.setOnFocusChangeListener(AdvOptionsDialog.this);
@@ -656,11 +682,12 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
 
         @Override
         public void onBindViewHolder(ViewHolder holder, int position) {
-            final Option option = mList.get(position);
-            final TextView tv = (TextView) holder.itemView;
-            if (mSelection == position) tv.requestFocus();
+            Option option = mList.get(position);
+            TextView tv = (TextView) holder.itemView;
+            if (mSelection == position)
+                tv.requestFocus();
             tv.setId(option.id);
-            final int icon = UiTools.getResourceFromAttribute(mActivity, option.icon);
+            int icon = UiTools.getResourceFromAttribute(mActivity, option.icon);
             if (option.id == ID_CHAPTER_TITLE)
                 tv.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0);
             else
@@ -682,18 +709,19 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
             return mList.get(position).id;
         }
 
-        void addOption(Option opt) {
+        public void addOption(Option opt) {
             mList.add(opt);
             notifyItemInserted(mList.size()-1);
         }
 
-        String getSelectedAdvOptionHelp () {
+        public String getSelectedAdvOptionHelp () {
             return mList.get(getSelection()).text;
         }
 
         public void setSelection(int position) {
             if (mSelection == position || position < 0 || position >= mList.size())
                 return;
+            int formerSelection = mSelection;
             mSelection = position;
             notifyDataSetChanged();
         }
@@ -706,7 +734,7 @@ public class AdvOptionsDialog extends DialogFragment implements View.OnClickList
             mList.remove(opt);
         }
 
-        class ViewHolder extends RecyclerView.ViewHolder implements View.OnLongClickListener {
+        public class ViewHolder extends RecyclerView.ViewHolder implements View.OnLongClickListener {
 
             public ViewHolder(View itemView) {
                 super(itemView);

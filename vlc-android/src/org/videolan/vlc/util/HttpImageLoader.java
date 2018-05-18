@@ -24,38 +24,132 @@
 
 package org.videolan.vlc.util;
 
+import android.databinding.OnRebindCallback;
+import android.databinding.ViewDataBinding;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.annotation.Nullable;
+import android.support.v17.leanback.widget.ImageCardView;
+import android.support.v4.util.SimpleArrayMap;
+import android.view.View;
+import android.widget.ImageView;
+import android.widget.TextView;
 
-import org.videolan.vlc.gui.helpers.BitmapCache;
+import org.videolan.vlc.BR;
+import org.videolan.vlc.VLCApplication;
+import org.videolan.vlc.gui.helpers.AsyncImageLoader.Callbacks;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.SoftReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-public class HttpImageLoader {
-    private static final BitmapCache cache = BitmapCache.getInstance();
+public class HttpImageLoader implements Callbacks {
+
+    private static SimpleArrayMap<String, SoftReference<Bitmap>> iconsMap = new SimpleArrayMap<>();
+    private String mImageLink;
+    private ViewDataBinding mBinding;
+    private boolean bindChanged = false;
+    final OnRebindCallback<ViewDataBinding> rebindCallbacks;
+    private static final Handler sHandler = new Handler(Looper.getMainLooper());
+
+    public HttpImageLoader(String imageLink) {
+        mImageLink = imageLink;
+        rebindCallbacks = null;
+    }
+
+    public HttpImageLoader(String imageLink, ViewDataBinding binding) {
+        mImageLink = imageLink;
+        mBinding = binding;
+        mBinding = binding;
+        mBinding.executePendingBindings();
+        rebindCallbacks = new OnRebindCallback<ViewDataBinding>() {
+            @Override
+            public boolean onPreBind(ViewDataBinding binding) {
+                bindChanged = true;
+                return super.onPreBind(binding);
+            }
+
+            @Override
+            public void onCanceled(ViewDataBinding binding) {
+                super.onCanceled(binding);
+            }
+
+            @Override
+            public void onBound(ViewDataBinding binding) {
+                super.onBound(binding);
+            }
+        };
+        mBinding.addOnRebindCallback(rebindCallbacks);
+    }
+
+    @Override
+    public Bitmap getImage() {
+        return downloadBitmap(mImageLink);
+    }
+
+    @Nullable
+    public static Bitmap getBitmapFromIconCache(String imageUrl) {
+        if (iconsMap.containsKey(imageUrl)) {
+            Bitmap bd = iconsMap.get(imageUrl).get();
+            if (bd != null) {
+                return bd;
+            } else
+                iconsMap.remove(imageUrl);
+        }
+        return null;
+    }
 
     @Nullable
     public static Bitmap downloadBitmap(String imageUrl) {
         HttpURLConnection urlConnection = null;
-        InputStream in = null;
-        Bitmap icon = cache.getBitmapFromMemCache(imageUrl);
-        if (icon != null) return icon;
+        Bitmap icon = getBitmapFromIconCache(imageUrl);
+        if (icon != null)
+            return icon;
         try {
-            final URL url = new URL(imageUrl);
+            URL url = new URL(imageUrl);
+            if (url.getPort() <= 0)
+                return null;
             urlConnection = (HttpURLConnection) url.openConnection();
-            in = new BufferedInputStream(urlConnection.getInputStream());
+            InputStream in = new BufferedInputStream(urlConnection.getInputStream());
             icon = BitmapFactory.decodeStream(in);
-            cache.addBitmapToMemCache(imageUrl, icon);
+            iconsMap.put(imageUrl, new SoftReference<>(icon));
         } catch (IOException|IllegalArgumentException ignored) {
         } finally {
-            Util.close(in);
-            if (urlConnection != null) urlConnection.disconnect();
+            if (urlConnection != null)
+                urlConnection.disconnect();
         }
         return icon;
+    }
+
+    @Override
+    public void updateImage(final Bitmap bitmap, final View target) {
+        if (bitmap == null || bitmap.getWidth() == 1 || bitmap.getHeight() == 1)
+            return;
+        if (mBinding != null) {
+            mBinding.removeOnRebindCallback(rebindCallbacks);
+            if (bindChanged)
+                return;
+            mBinding.setVariable(BR.scaleType, ImageView.ScaleType.FIT_CENTER);
+            mBinding.setVariable(BR.image, new BitmapDrawable(VLCApplication.getAppResources(), bitmap));
+            mBinding.setVariable(BR.protocol, null);
+        } else {
+            sHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (target instanceof ImageCardView)
+                        ((ImageCardView) target).setMainImage(new BitmapDrawable(target.getResources(), bitmap));
+                    else if (target instanceof ImageView)
+                        ((ImageView) target).setImageBitmap(bitmap);
+                    else if (target instanceof TextView)
+                        target.setBackgroundDrawable(new BitmapDrawable(target.getResources(), bitmap));
+                }
+            });
+        }
     }
 }

@@ -4,26 +4,26 @@
     android:key="ui_category"
     android:title="@string/interface_prefs_screen">
 
-    <android.support.v7.preference.SwitchPreferenceCompat
+    <org.videolan.vlc.gui.preferences.CustomSwitchPreference
         android:defaultValue="false"
         android:key="enable_black_theme"
         android:summary="@string/enable_black_theme_summary"
         android:title="@string/enable_black_theme"
         android:disableDependentsState="true" />
 
-    <android.support.v7.preference.SwitchPreferenceCompat
+    <org.videolan.vlc.gui.preferences.CustomSwitchPreference
         android:defaultValue="false"
         android:key="daynight"
         android:dependency="enable_black_theme"
         android:summary="@string/daynight_summary"
         android:title="@string/daynight_title" />
 
-    <CheckBoxPreference
+    <org.videolan.vlc.gui.preferences.CustomCheckBoxPreference
         android:key="tv_ui"
         android:summary="@string/tv_ui_summary"
         android:title="@string/tv_ui_title" />
 
-    <CheckBoxPreference
+    <org.videolan.vlc.gui.preferences.CustomCheckBoxPreference
         android:defaultValue="true"
         android:key="playback_speed"
         android:summary="@string/playback_speed_summary"
@@ -35,23 +35,23 @@
         android:summary="@string/set_locale_detail"
         android:title="@string/set_locale" />
 
-    <CheckBoxPreference
+    <org.videolan.vlc.gui.preferences.CustomCheckBoxPreference
         android:defaultValue="true"
         android:key="resume_playback"
         android:summary="@string/resume_playback_summary"
         android:title="@string/resume_playback_title" />
 
-    <PreferenceCategory
+    <org.videolan.vlc.gui.preferences.CustomPreferenceCategory
         android:title="@string/interface_secondary_display_category_title"
         android:key="secondary_display_category">
         <Preference
             android:summary="@string/interface_secondary_display_category_summary"
             android:key="secondary_display_category_summary" />
 
-        <CheckBoxPreference
+        <org.videolan.vlc.gui.preferences.CustomCheckBoxPreference
             android:defaultValue="false"
             android:key="enable_clone_mode"
             android:summary="@string/enable_clone_mode_summary"
             android:title="@string/enable_clone_mode" />
-    </PreferenceCategory>
+    </org.videolan.vlc.gui.preferences.CustomPreferenceCategory>
 </PreferenceScreen>

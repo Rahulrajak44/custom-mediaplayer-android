@@ -31,7 +31,6 @@ while [ $# -gt 0 ]; do
             echo "  X86:     x86, x86_64"
             echo "  MIPS:    mips, mips64."
             echo "Use --release to build in release mode"
-            echo "Use --signrelease to build in release mode and sign apk, see vlc-android/build.gradle"
             echo "Use -s to set your keystore file and -p for the password"
             echo "Use -c to get a ChromeOS build"
             echo "Use -l to build only LibVLC"
@@ -47,10 +46,6 @@ while [ $# -gt 0 ]; do
         -r|release|--release)
             RELEASE=1
             ;;
-        signrelease|--signrelease)
-            SIGNED_RELEASE=1
-            RELEASE=1
-            ;;
         -s|--signature)
             KEYSTORE_FILE=$2
             shift
@@ -61,16 +56,12 @@ while [ $# -gt 0 ]; do
             ;;
         -l)
             BUILD_LIBVLC=1
-            NO_ML=1
             ;;
         run)
             RUN=1
             ;;
         --asan)
             ASAN=1
-            ;;
-        --no-ml)
-            NO_ML=1
             ;;
         *)
             diagnostic "$0: Invalid option '$1'."
@@ -116,7 +107,7 @@ fi
 
 if [ ! -d "gradle/wrapper" ]; then
     diagnostic "Downloading gradle"
-    GRADLE_VERSION=4.4
+    GRADLE_VERSION=3.4.1
     GRADLE_URL=https://download.videolan.org/pub/contrib/gradle/gradle-${GRADLE_VERSION}-bin.zip
     wget ${GRADLE_URL} 2>/dev/null || curl -O ${GRADLE_URL}
     checkfail "gradle: download failed"
@@ -126,7 +117,7 @@ if [ ! -d "gradle/wrapper" ]; then
 
     cd gradle-${GRADLE_VERSION}
 
-    ./bin/gradle --offline wrapper
+    ./bin/gradle wrapper
     checkfail "gradle: wrapper failed"
 
     ./gradlew -version
@@ -176,20 +167,14 @@ init_local_props() {
         echo_props > "$1"
         return 0
     fi
-    # escape special chars to get regex that matches string
-    make_regex() {
-        echo "$1" | sed -e 's/\([[\^$.*]\)/\\\1/g' -
-    }
-    android_sdk_regex=`make_regex "${ANDROID_SDK}"`
-    android_ndk_regex=`make_regex "${ANDROID_NDK}"`
     # check for lines setting the SDK directory
     sdk_line_start="^sdk\.dir="
     total_sdk_count=`grep -c "${sdk_line_start}" "$1"`
-    good_sdk_count=`grep -c "${sdk_line_start}${android_sdk_regex}\$" "$1"`
+    good_sdk_count=`grep -c "${sdk_line_start}${ANDROID_SDK}\$" "$1"`
     # check for lines setting the NDK directory
     ndk_line_start="^ndk\.dir="
     total_ndk_count=`grep -c "${ndk_line_start}" "$1"`
-    good_ndk_count=`grep -c "${ndk_line_start}${android_ndk_regex}\$" "$1"`
+    good_ndk_count=`grep -c "${ndk_line_start}${ANDROID_NDK}\$" "$1"`
     # if one of each is found and both match the environment vars, no action needed
     if [ "$total_sdk_count" -eq "1" -a "$good_sdk_count" -eq "1" \
 	    -a "$total_ndk_count" -eq "1" -a "$good_ndk_count" -eq "1" ]
@@ -225,7 +210,6 @@ init_local_props local.properties || { echo "Error initializing local.properties
 if [ ! -d "$ANDROID_SDK/licenses" ]; then
     mkdir "$ANDROID_SDK/licenses"
     echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$ANDROID_SDK/licenses/android-sdk-license"
-    echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$ANDROID_SDK/licenses/android-sdk-license"
     echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$ANDROID_SDK/licenses/android-sdk-preview-license"
 fi
 
@@ -233,27 +217,27 @@ fi
 # Fetch VLC source #
 ####################
 
-TESTED_HASH=fb3a5ca
+TESTED_HASH=3fdb5dc
 if [ ! -d "vlc" ]; then
     diagnostic "VLC source not found, cloning"
-    git clone https://git.videolan.org/git/vlc/vlc-3.0.git vlc
+    git clone http://git.videolan.org/git/vlc.git vlc
     checkfail "vlc source: git clone failed"
-fi
-diagnostic "VLC source found"
-cd vlc
-if ! git cat-file -e ${TESTED_HASH}; then
-    cat 1>&2 << EOF
+else
+    diagnostic "VLC source found"
+    cd vlc
+    if ! git cat-file -e ${TESTED_HASH}; then
+        cat 1>&2 << EOF
 ***
 *** Error: Your vlc checkout does not contain the latest tested commit: ${TESTED_HASH}
 ***
 EOF
-    exit 1
+        exit 1
+    fi
+    if [ "$RELEASE" = 1 ]; then
+        git reset --hard ${TESTED_HASH}
+    fi
+    cd ..
 fi
-if [ "$RELEASE" = 1 ]; then
-    git reset --hard ${TESTED_HASH}
-fi
-cd ..
-
 
 ############
 # Make VLC #
@@ -270,9 +254,6 @@ fi
 if [ "$ASAN" = 1 ]; then
     OPTS="$OPTS --asan"
 fi
-if [ "$NO_ML" = 1 ]; then
-    OPTS="$OPTS --no-ml"
-fi
 
 ./compile-libvlc.sh $OPTS
 
@@ -281,9 +262,7 @@ fi
 ##################
 PLATFORM="Vanilla"
 BUILDTYPE="Debug"
-if [ "$SIGNED_RELEASE" = 1 ]; then
-    BUILDTYPE="signedRelease"
-elif [ "$RELEASE" = 1 ]; then
+if [ "$RELEASE" = 1 ]; then
     BUILDTYPE="Release"
 fi
 if [ "$CHROME_OS" = 1 ]; then

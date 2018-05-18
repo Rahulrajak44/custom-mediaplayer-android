@@ -20,89 +20,90 @@
  *****************************************************************************/
 package org.videolan.vlc.gui.tv.audioplayer;
 
-import android.content.Context;
 import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
 import org.videolan.medialibrary.media.MediaWrapper;
 import org.videolan.vlc.R;
-import org.videolan.vlc.databinding.TvSimpleListItemBinding;
-import org.videolan.vlc.gui.helpers.SelectorViewHolder;
-import org.videolan.vlc.util.Util;
+import org.videolan.vlc.media.MediaUtils;
 
-import java.util.List;
+import java.util.ArrayList;
 
-public class PlaylistAdapter extends RecyclerView.Adapter<PlaylistAdapter.ViewHolder> {
+public class PlaylistAdapter extends RecyclerView.Adapter<PlaylistAdapter.ViewHolder> implements View.OnClickListener{
     public static final String TAG = "VLC/PlaylistAdapter";
 
-    private AudioPlayerActivity audioPlayerActivity;
-    private List<MediaWrapper> dataset;
-    private int selectedItem = -1;
+    private AudioPlayerActivity mAudioPlayerActivity;
+    private ArrayList<MediaWrapper> mDataset;
+    private int mSelectedItem = -1;
 
-    public class ViewHolder extends SelectorViewHolder<TvSimpleListItemBinding> implements View.OnClickListener {
-        public ViewHolder(TvSimpleListItemBinding vdb) {
-            super(vdb);
-            itemView.setOnClickListener(this);
-        }
-
-        @Override
-        public void onClick(View v) {
-            setSelection(getLayoutPosition());
-            audioPlayerActivity.playSelection();
+    public static class ViewHolder extends RecyclerView.ViewHolder {
+        public TextView mTitleTv;
+        public TextView mArtistTv;
+        public ViewHolder(View v) {
+            super(v);
+            mTitleTv = (TextView) v.findViewById(android.R.id.text1);
+            mArtistTv = (TextView) v.findViewById(android.R.id.text2);
         }
     }
 
-    PlaylistAdapter(AudioPlayerActivity audioPlayerActivity, List<MediaWrapper> myDataset) {
-        dataset = myDataset;
-        this.audioPlayerActivity = audioPlayerActivity;
+    public PlaylistAdapter(AudioPlayerActivity audioPlayerActivity, ArrayList<MediaWrapper> myDataset) {
+        mDataset = myDataset;
+        mAudioPlayerActivity = audioPlayerActivity;
     }
 
     @Override
-    public PlaylistAdapter.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        return new ViewHolder(TvSimpleListItemBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false));
+    public PlaylistAdapter.ViewHolder onCreateViewHolder(ViewGroup parent,
+                                                         int viewType) {
+        View v = LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.tv_simple_list_item, parent, false);
+
+        v.setClickable(true);
+        v.setFocusable(true);
+        v.setFocusableInTouchMode(true);
+        ViewHolder vh = new ViewHolder(v);
+        return vh;
     }
 
     @Override
     public void onBindViewHolder(ViewHolder holder, int position) {
-        holder.binding.setMedia(dataset.get(position));
-        final int textAppearance = position == selectedItem ? R.style.TextAppearance_AppCompat_Title : R.style.TextAppearance_AppCompat_Medium;
-        final Context ctx = holder.itemView.getContext();
-        holder.binding.artist.setTextAppearance(ctx, textAppearance);
-        holder.binding.title.setTextAppearance(ctx, textAppearance);
-    }
-
-    @Override
-    public void onBindViewHolder(ViewHolder holder, int position, List<Object> payloads) {
-        if (Util.isListEmpty(payloads)) super.onBindViewHolder(holder, position, payloads);
-        else {
-            final int textAppearance = (boolean) payloads.get(0) ? R.style.TextAppearance_AppCompat_Title : R.style.TextAppearance_AppCompat_Medium;
-            final Context ctx = holder.itemView.getContext();
-            holder.binding.artist.setTextAppearance(ctx, textAppearance);
-            holder.binding.title.setTextAppearance(ctx, textAppearance);
-        }
+        MediaWrapper mediaWrapper = mDataset.get(position);
+        holder.mTitleTv.setText(MediaUtils.getMediaTitle(mediaWrapper));
+        holder.mArtistTv.setText(MediaUtils.getMediaArtist(holder.itemView.getContext(), mediaWrapper));
+        holder.itemView.setActivated(position == mSelectedItem);
+        holder.itemView.setOnClickListener(this);
     }
 
     @Override
     public int getItemCount() {
-        return dataset.size();
+        return mDataset.size();
     }
 
-    int getSelectedItem(){
-        return selectedItem;
+    public int getmSelectedItem(){
+        return mSelectedItem;
     }
 
     public void setSelection(int pos) {
-        if (pos == selectedItem) return;
-        int previous = selectedItem;
-        selectedItem = pos;
-        if (previous != -1) notifyItemChanged(previous, false);
-        if (pos != -1) notifyItemChanged(selectedItem, true);
+        if (pos == mSelectedItem)
+            return;
+        int previous = mSelectedItem;
+        mSelectedItem = pos;
+        if (previous != -1)
+            notifyItemChanged(previous);
+        if (pos != -1){
+            notifyItemChanged(mSelectedItem);
+        }
     }
 
-    public void updateList(List<MediaWrapper> list){
-        dataset = list;
+    public void updateList(ArrayList<MediaWrapper> list){
+        mDataset = list;
         notifyDataSetChanged();
+    }
+
+    @Override
+    public void onClick(View v){
+        mAudioPlayerActivity.playSelection();
     }
 }

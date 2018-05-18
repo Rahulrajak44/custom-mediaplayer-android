@@ -29,7 +29,7 @@ public class VLCAppWidgetProviderBlack extends VLCAppWidgetProvider {
     }
 
     protected int getPlayPauseImage(boolean isPlaying){
-        return isPlaying ? R.drawable.ic_widget_pause_w : R.drawable.ic_widget_play_w;
+        return isPlaying ? R.drawable.ic_widget_pause_normal_w : R.drawable.ic_widget_play_normal_w;
     }
 
 }

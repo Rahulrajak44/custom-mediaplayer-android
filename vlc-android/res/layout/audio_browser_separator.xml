@@ -14,6 +14,5 @@
         android:layout_marginStart="@dimen/default_margin"
         android:singleLine="true"
         android:text="@{item.title}"
-        android:textColor="?attr/audio_browser_separator"
         android:textSize="20sp" />
 </layout>

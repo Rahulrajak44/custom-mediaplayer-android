@@ -50,7 +50,6 @@ import org.videolan.vlc.R;
 import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.gui.audio.AudioBrowserAdapter;
 import org.videolan.vlc.interfaces.IEventsHandler;
-import org.videolan.vlc.util.WorkersKt;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,7 +80,8 @@ public class SavePlaylistDialog extends DialogFragment implements View.OnClickLi
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mMedialibrary = VLCApplication.getMLInstance();
-        mAdapter = new AudioBrowserAdapter(MediaLibraryItem.TYPE_PLAYLIST, this);
+        mAdapter = new AudioBrowserAdapter(getActivity(),MediaLibraryItem.TYPE_PLAYLIST,  this, false);
+        mAdapter.addAll(new ArrayList<MediaLibraryItem>(Arrays.asList(mMedialibrary.getPlaylists())));
         mTracks = (MediaWrapper[]) getArguments().getParcelableArray(KEY_TRACKS);
         mNewTrack = (MediaWrapper[]) getArguments().getParcelableArray(KEY_NEW_TRACKS);
     }
@@ -101,18 +101,13 @@ public class SavePlaylistDialog extends DialogFragment implements View.OnClickLi
 
     @Override
     public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        return inflater.inflate(R.layout.dialog_playlist, container);
-    }
+        View view = inflater.inflate(R.layout.dialog_playlist, container);
 
-    @Override
-    public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
-
-        mListView = view.findViewById(android.R.id.list);
-        mSaveButton = view.findViewById(R.id.dialog_playlist_save);
-        mCancelButton = view.findViewById(R.id.dialog_playlist_cancel);
-        mEmptyView = view.findViewById(android.R.id.empty);
-        TextInputLayout mLayout = view.findViewById(R.id.dialog_playlist_name);
+        mListView = (RecyclerView) view.findViewById(android.R.id.list);
+        mSaveButton = (Button) view.findViewById(R.id.dialog_playlist_save);
+        mCancelButton = (Button) view.findViewById(R.id.dialog_playlist_cancel);
+        mEmptyView = (TextView) view.findViewById(android.R.id.empty);
+        TextInputLayout mLayout = (TextInputLayout)view.findViewById(R.id.dialog_playlist_name);
         mEditText = mLayout.getEditText();
         mSaveButton.setOnClickListener(this);
         mCancelButton.setOnClickListener(new View.OnClickListener() {
@@ -125,7 +120,8 @@ public class SavePlaylistDialog extends DialogFragment implements View.OnClickLi
         mEditText.setOnEditorActionListener(this);
         mListView.setLayoutManager(new LinearLayoutManager(view.getContext()));
         mListView.setAdapter(mAdapter);
-        mAdapter.update(new ArrayList<MediaLibraryItem>(Arrays.asList(mMedialibrary.getPlaylists())));
+        updateEmptyView();
+        return view;
     }
 
     void updateEmptyView() {
@@ -145,38 +141,42 @@ public class SavePlaylistDialog extends DialogFragment implements View.OnClickLi
     }
 
     private void savePlaylist() {
-        WorkersKt.runBackground(new Runnable() {
+        VLCApplication.runBackground(new Runnable() {
             public void run() {
                 final String name = mEditText.getText().toString().trim();
-                final boolean addTracks = !Tools.isArrayEmpty(mNewTrack);
+                boolean addTracks = !Tools.isArrayEmpty(mNewTrack);
                 Playlist playlist = mMedialibrary.getPlaylist(mPlaylistId);
                 boolean exists = playlist != null;
                 MediaWrapper[] tracks;
-                if (!exists) playlist = mMedialibrary.createPlaylist(name);
-                if (playlist == null) return;
+                if (!exists)
+                    playlist = mMedialibrary.createPlaylist(name);
+                if (playlist == null)
+                    return;
                 if (addTracks) {
                     tracks = mNewTrack;
                 } else {//Save a playlist
-                    for (MediaWrapper mw : playlist.getTracks()) {
+                    for (MediaWrapper mw : playlist.getTracks())
                         playlist.remove(mw.getId());
-                    }
                     tracks = mTracks;
                 }
-                if (tracks == null) return;
-                final LinkedList<Long> ids = new LinkedList<>();
+                LinkedList<Long> ids = new LinkedList<>();
                 for (MediaWrapper mw : tracks) {
                     long id = mw.getId();
                     if (id == 0) {
                         MediaWrapper media = mMedialibrary.getMedia(mw.getUri());
-                        if (media != null) ids.add(media.getId());
+                        if (media != null)
+                            ids.add(media.getId());
                         else {
                             media = mMedialibrary.addMedia(mw.getLocation());
-                            if (media != null) ids.add(media.getId());
+                            if (media != null)
+                                ids.add(media.getId());
                         }
-                    } else ids.add(id);
+                    } else
+                        ids.add(id);
                 }
                 playlist.append(ids);
-                if (mCallBack != null) mCallBack.run();
+                if (mCallBack != null)
+                    mCallBack.run();
             }
         });
         dismiss();

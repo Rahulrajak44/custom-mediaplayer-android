@@ -24,31 +24,38 @@
 package org.videolan.vlc.gui.tv.browser;
 
 import android.annotation.TargetApi;
-import android.arch.lifecycle.Observer;
-import android.arch.lifecycle.ViewModelProviders;
 import android.os.Build;
-import android.os.Bundle;
-import android.support.annotation.Nullable;
+import android.text.TextUtils;
 
-import org.videolan.medialibrary.media.MediaLibraryItem;
-import org.videolan.vlc.viewmodels.browser.FileBrowserProvider;
+import org.videolan.libvlc.util.AndroidUtil;
+import org.videolan.medialibrary.media.MediaWrapper;
+import org.videolan.vlc.R;
+import org.videolan.vlc.VLCApplication;
+import org.videolan.vlc.util.AndroidDevices;
 
-import java.util.List;
-import java.util.Map;
+import java.io.File;
 
 @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
-public class DirectoryBrowserFragment extends MediaSortedFragment<FileBrowserProvider> {
+public class DirectoryBrowserFragment extends MediaSortedFragment{
 
     public static final String TAG = "VLC/DirectoryBrowserFragment";
 
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        provider = ViewModelProviders.of(this, new FileBrowserProvider.Factory(mUri.toString(), mShowHiddenFiles)).get(FileBrowserProvider.class);
-        provider.getCategories().observe(this, new Observer<Map<String, List<MediaLibraryItem>>>() {
+    protected void browseRoot() {
+        VLCApplication.runBackground(new Runnable() {
             @Override
-            public void onChanged(@Nullable Map<String, List<MediaLibraryItem>> stringListMap) {
-                if (stringListMap != null) update(stringListMap);
+            public void run() {
+                String storages[] = AndroidDevices.getMediaDirectories();
+                MediaWrapper directory;
+                for (String mediaDirLocation : storages) {
+                    if (!(new File(mediaDirLocation).exists()))
+                        continue;
+                    directory = new MediaWrapper(AndroidUtil.PathToUri(mediaDirLocation));
+                    directory.setType(MediaWrapper.TYPE_DIR);
+                    if (TextUtils.equals(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY, mediaDirLocation))
+                        directory.setDisplayTitle(getString(R.string.internal_memory));
+                    addMedia(directory);
+                }
+                sort();
             }
         });
     }

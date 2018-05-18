@@ -9,7 +9,6 @@
         android:layout_height="match_parent"
         android:max="100"
         style="@android:style/Widget.ProgressBar.Horizontal"
-        android:progressDrawable="?attr/progress_mini_player"
         android:background="?attr/background_default"/>
     <TextView
         android:id="@+id/scan_progress_text"

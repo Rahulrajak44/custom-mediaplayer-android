@@ -153,7 +153,6 @@ abstract class VLCObject<T extends VLCEvent> {
             @Override
             public void run() {
                 listener.onEvent(event);
-                event.release();
             }
         }
 

@@ -2,18 +2,11 @@ package org.videolan.medialibrary.media;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.text.TextUtils;
 
 import org.videolan.libvlc.util.VLCUtil;
 import org.videolan.medialibrary.Medialibrary;
-import org.videolan.medialibrary.R;
 
 public class Album extends MediaLibraryItem {
-    public static final String TAG = "VLC/Album";
-    public static class SpecialRes {
-        public static String UNKNOWN_ALBUM = Medialibrary.getContext().getString(R.string.unknown_album);
-    }
-
     private int releaseYear;
     private String artworkMrl;
     private String albumArtist;
@@ -29,12 +22,6 @@ public class Album extends MediaLibraryItem {
         this.albumArtistId = albumArtistId;
         this.mTracksCount = nbTracks;
         this.duration = duration;
-        if (TextUtils.isEmpty(title)) mTitle = SpecialRes.UNKNOWN_ALBUM;
-        if (albumArtistId == 1L) {
-            this.albumArtist = Artist.SpecialRes.UNKNOWN_ARTIST;
-        } else if (albumArtistId == 2L) {
-            this.albumArtist = Artist.SpecialRes.VARIOUS_ARTISTS;
-        }
     }
 
     public long getId() {
@@ -43,7 +30,7 @@ public class Album extends MediaLibraryItem {
 
     @Override
     public String getDescription() {
-        return albumArtist;
+        return mDescription == null ? albumArtist : mDescription;
     }
 
     public int getReleaseYear() {
@@ -68,12 +55,8 @@ public class Album extends MediaLibraryItem {
     }
 
     public MediaWrapper[] getTracks() {
-        return getTracks(Medialibrary.SORT_DEFAULT, false);
-    }
-
-    public MediaWrapper[] getTracks(int sort, boolean desc) {
         Medialibrary ml = Medialibrary.getInstance();
-        return ml != null && ml.isInitiated() ? nativeGetTracksFromAlbum(ml, mId, sort, desc) : Medialibrary.EMPTY_COLLECTION;
+        return ml != null && ml.isInitiated() ? nativeGetTracksFromAlbum(ml, mId) : Medialibrary.EMPTY_COLLECTION;
     }
 
     @Override
@@ -81,7 +64,7 @@ public class Album extends MediaLibraryItem {
         return TYPE_ALBUM;
     }
 
-    private native MediaWrapper[] nativeGetTracksFromAlbum(Medialibrary ml, long mId, int sort, boolean desc);
+    private native MediaWrapper[] nativeGetTracksFromAlbum(Medialibrary ml, long mId);
 
     @Override
     public void writeToParcel(Parcel parcel, int i) {

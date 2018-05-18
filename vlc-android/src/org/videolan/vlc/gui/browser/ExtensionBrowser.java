@@ -1,14 +1,14 @@
 package org.videolan.vlc.gui.browser;
 
-import android.app.Activity;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentActivity;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.DividerItemDecoration;
 import android.support.v7.widget.LinearLayoutManager;
 import android.view.ContextMenu;
 import android.view.LayoutInflater;
@@ -19,6 +19,7 @@ import android.widget.TextView;
 
 import org.videolan.medialibrary.media.MediaWrapper;
 import org.videolan.vlc.R;
+import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.extensions.ExtensionListing;
 import org.videolan.vlc.extensions.ExtensionManagerService;
 import org.videolan.vlc.extensions.Utils;
@@ -46,15 +47,15 @@ public class ExtensionBrowser extends Fragment implements View.OnClickListener, 
     private static final int REFRESH_TIMEOUT = 5000;
 
     private String mTitle;
-    private FloatingActionButton mAddDirectoryFAB;
-    private ExtensionAdapter mAdapter;
+    FloatingActionButton mAddDirectoryFAB;
+    ExtensionAdapter mAdapter;
     protected ContextMenuRecyclerView mRecyclerView;
+    protected LinearLayoutManager mLayoutManager;
     protected TextView mEmptyView;
     protected SwipeRefreshLayout mSwipeRefreshLayout;
 
-    private ExtensionManagerService mExtensionManagerService;
+    ExtensionManagerService mExtensionManagerService;
     private boolean showSettings = false;
-    private boolean mustBeTerminated = false;
 
     public void setExtensionService(ExtensionManagerService service) {
         mExtensionManagerService = service;
@@ -69,37 +70,28 @@ public class ExtensionBrowser extends Fragment implements View.OnClickListener, 
         super.onCreate(bundle);
         if (bundle == null)
             bundle = getArguments();
-        if (bundle != null) {
+        if (bundle != null){
             mTitle = bundle.getString(KEY_TITLE);
             showSettings = bundle.getBoolean(KEY_SHOW_FAB);
-            List<VLCExtensionItem> list = bundle.getParcelableArrayList(KEY_ITEMS_LIST);
-            if (list != null)
-                mAdapter.addAll(list);
+            mAdapter.addAll(bundle.<VLCExtensionItem>getParcelableArrayList(KEY_ITEMS_LIST));
         }
-        setHasOptionsMenu(true);
     }
 
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState){
         View v = inflater.inflate(R.layout.directory_browser, container, false);
-        mRecyclerView = v.findViewById(R.id.network_list);
-        mEmptyView = v.findViewById(android.R.id.empty);
+        mRecyclerView = (ContextMenuRecyclerView) v.findViewById(R.id.network_list);
+        mEmptyView = (TextView) v.findViewById(android.R.id.empty);
         mEmptyView.setText(R.string.extension_empty);
-        mRecyclerView.setLayoutManager(new LinearLayoutManager(getActivity()));
+        mLayoutManager = new LinearLayoutManager(getActivity());
+        mRecyclerView.addItemDecoration(new DividerItemDecoration(VLCApplication.getAppContext(), DividerItemDecoration.VERTICAL));
+        mRecyclerView.setLayoutManager(mLayoutManager);
         mRecyclerView.setAdapter(mAdapter);
         registerForContextMenu(mRecyclerView);
 
-        mSwipeRefreshLayout = v.findViewById(R.id.swipeLayout);
+        mSwipeRefreshLayout = (SwipeRefreshLayout) v.findViewById(R.id.swipeLayout);
         mSwipeRefreshLayout.setOnRefreshListener(this);
 
         return v;
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (mustBeTerminated)
-            getActivity().getSupportFragmentManager().beginTransaction().remove(this).commit();
-        mustBeTerminated = true;
     }
 
     @Override
@@ -108,10 +100,12 @@ public class ExtensionBrowser extends Fragment implements View.OnClickListener, 
         setTitle(mTitle);
         updateDisplay();
         if (showSettings) {
-            if (mAddDirectoryFAB == null) mAddDirectoryFAB = getActivity().findViewById(R.id.fab);
+            mAddDirectoryFAB = (FloatingActionButton) getActivity().findViewById(R.id.fab);
             mAddDirectoryFAB.setImageResource(R.drawable.ic_fab_add);
             mAddDirectoryFAB.setVisibility(View.VISIBLE);
             mAddDirectoryFAB.setOnClickListener(this);
+            mAddDirectoryFAB.setBackgroundTintList(ColorStateList.valueOf(((VLCApplication)getActivity().getApplication()).getConfig().getColorAccent()));
+
         }
     }
 
@@ -128,13 +122,15 @@ public class ExtensionBrowser extends Fragment implements View.OnClickListener, 
         final AppCompatActivity activity = (AppCompatActivity)getActivity();
         if (activity != null && activity.getSupportActionBar() != null) {
             activity.getSupportActionBar().setTitle(title);
-            getActivity().invalidateOptionsMenu();
+            getActivity().supportInvalidateOptionsMenu();
         }
     }
 
-    public void goBack() {
-        final FragmentActivity activity = getActivity();
-        if (activity != null && activity.getSupportFragmentManager().popBackStackImmediate()) getActivity().finish();
+    public void goBack(){
+        if (showSettings)
+            getActivity().finish();
+        else
+            getActivity().getSupportFragmentManager().popBackStack();
     }
 
     public void doRefresh(String title, List<VLCExtensionItem> items) {
@@ -153,7 +149,7 @@ public class ExtensionBrowser extends Fragment implements View.OnClickListener, 
     }
 
     public void browseItem(VLCExtensionItem item) {
-        mExtensionManagerService.browse(item.stringId);
+        mExtensionManagerService.browse(item.intId, item.stringId);
     }
 
     @Override
@@ -192,7 +188,9 @@ public class ExtensionBrowser extends Fragment implements View.OnClickListener, 
     public boolean onContextItemSelected(MenuItem item) {
         ContextMenuRecyclerView.RecyclerContextMenuInfo info = (ContextMenuRecyclerView
                 .RecyclerContextMenuInfo) item.getMenuInfo();
-        return info != null && handleContextItemSelected(item, info.position);
+        if (info != null && handleContextItemSelected(item, info.position))
+            return true;
+        return super.onContextItemSelected(item);
     }
 
     public void openContextMenu(final int position) {
@@ -203,7 +201,7 @@ public class ExtensionBrowser extends Fragment implements View.OnClickListener, 
         switch (item.getItemId()) {
             case R.id.extension_item_view_play_all:
                 List<VLCExtensionItem> items = mAdapter.getAll();
-                List<MediaWrapper> medias = new ArrayList<>(items.size());
+                ArrayList<MediaWrapper> medias = new ArrayList<>(items.size());
                 for (VLCExtensionItem vlcItem : items) {
                     medias.add(Utils.mediawrapperFromExtension(vlcItem));
                 }
@@ -228,7 +226,7 @@ public class ExtensionBrowser extends Fragment implements View.OnClickListener, 
 
     private class ExtensionBrowserHandler extends WeakHandler<ExtensionBrowser> {
 
-        ExtensionBrowserHandler(ExtensionBrowser owner) {
+        public ExtensionBrowserHandler(ExtensionBrowser owner) {
             super(owner);
         }
 

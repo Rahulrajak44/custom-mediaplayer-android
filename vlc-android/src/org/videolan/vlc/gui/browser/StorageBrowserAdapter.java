@@ -23,8 +23,6 @@
 
 package org.videolan.vlc.gui.browser;
 
-import android.net.Uri;
-import android.support.annotation.MainThread;
 import android.view.View;
 import android.widget.CheckBox;
 
@@ -38,13 +36,11 @@ import org.videolan.vlc.util.CustomDirectories;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 class StorageBrowserAdapter extends BaseBrowserAdapter {
 
-    private static List<String> mMediaDirsLocation;
-    private static List<String> mCustomDirsLocation;
-
+    private static ArrayList<String> mMediaDirsLocation;
+    private static ArrayList<String> mCustomDirsLocation;
     StorageBrowserAdapter(BaseBrowserFragment fragment) {
         super(fragment);
         updateMediaDirs();
@@ -58,11 +54,13 @@ class StorageBrowserAdapter extends BaseBrowserAdapter {
         if (storage.getItemType() == MediaLibraryItem.TYPE_MEDIA)
             storage = new Storage(((MediaWrapper)storage).getUri());
         String storagePath = ((Storage)storage).getUri().getPath();
-        if (!storagePath.endsWith("/")) storagePath += "/";
+        if (!storagePath.endsWith("/"))
+            storagePath += "/";
         boolean hasContextMenu = mCustomDirsLocation.contains(storagePath);
         boolean checked = ((StorageBrowserFragment) fragment).mScannedDirectory || mMediaDirsLocation.contains(storagePath);
         vh.binding.setItem(storage);
         vh.binding.setHasContextMenu(hasContextMenu);
+        vh.binding.browserCheckbox.setColor(((VLCApplication)fragment.getActivity().getApplication()).getConfig().getColorAccent());
         if (checked)
             vh.binding.browserCheckbox.setState(ThreeStatesCheckbox.STATE_CHECKED);
         else if (hasDiscoveredChildren(storagePath))
@@ -70,28 +68,43 @@ class StorageBrowserAdapter extends BaseBrowserAdapter {
         else
             vh.binding.browserCheckbox.setState(ThreeStatesCheckbox.STATE_UNCHECKED);
         vh.binding.setCheckEnabled(!((StorageBrowserFragment) fragment).mScannedDirectory);
+        if (hasContextMenu)
+            vh.setContextMenuListener();
     }
 
     private boolean hasDiscoveredChildren(String path) {
-        for (String directory : mMediaDirsLocation) if (directory.startsWith(path)) return true;
+        for (String directory : mMediaDirsLocation)
+            if (directory.startsWith(path))
+                return true;
         return false;
     }
 
+    public void addItem(MediaLibraryItem item, boolean top, int position) {
+        if (item.getItemType() == MediaLibraryItem.TYPE_MEDIA)
+            item = new Storage(((MediaWrapper)item).getUri());
+        else if (item.getItemType() != MediaLibraryItem.TYPE_STORAGE)
+            return;
+        super.addItem(item, top, position);
+    }
+
     void updateMediaDirs() {
-        if (mMediaDirsLocation != null) mMediaDirsLocation.clear();
-        final String folders[] = VLCApplication.getMLInstance().getFoldersList();
+        if (mMediaDirsLocation != null)
+            mMediaDirsLocation.clear();
+        String folders[] = VLCApplication.getMLInstance().getFoldersList();
         mMediaDirsLocation = new ArrayList<>(folders.length);
         for (String folder : folders) {
-            mMediaDirsLocation.add(Uri.decode(folder.startsWith("file://") ? folder.substring(7) : folder));
+            mMediaDirsLocation.add(folder.substring(7));
         }
         mCustomDirsLocation = new ArrayList<>(Arrays.asList(CustomDirectories.getCustomDirectories()));
     }
 
     protected void checkBoxAction(View v, String mrl) {
-        final ThreeStatesCheckbox tscb = (ThreeStatesCheckbox) v;
+        ThreeStatesCheckbox tscb = (ThreeStatesCheckbox) v;
         int state = tscb.getState();
-        if (state == ThreeStatesCheckbox.STATE_CHECKED) MedialibraryUtils.addDir(mrl);
-        else MedialibraryUtils.removeDir(mrl);
+        if (state == ThreeStatesCheckbox.STATE_CHECKED)
+            MedialibraryUtils.addDir(mrl);
+        else
+            MedialibraryUtils.removeDir(mrl);
         ((StorageBrowserFragment)fragment).processEvent((CheckBox) v, mrl);
     }
 }

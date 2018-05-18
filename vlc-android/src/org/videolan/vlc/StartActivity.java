@@ -23,103 +23,135 @@
 
 package org.videolan.vlc;
 
-import android.content.ClipData;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.provider.MediaStore;
-import android.support.v4.app.FragmentActivity;
+import android.util.Log;
+
+import com.appsgeyser.sdk.AppsgeyserSDK;
+import com.appsgeyser.sdk.ads.FullScreenBanner;
+import com.appsgeyser.sdk.ads.IFullScreenBannerListener;
+import com.appsgeyser.sdk.configuration.Constants;
 
 import org.videolan.libvlc.util.AndroidUtil;
+import org.videolan.vlc.gui.AudioPlayerContainerActivity;
+import org.videolan.vlc.gui.BaseActivity;
 import org.videolan.vlc.gui.MainActivity;
 import org.videolan.vlc.gui.SearchActivity;
-import org.videolan.vlc.gui.helpers.hf.StoragePermissionsDelegate;
 import org.videolan.vlc.gui.tv.MainTvActivity;
+import org.videolan.vlc.gui.tv.audioplayer.AudioPlayerActivity;
 import org.videolan.vlc.gui.video.VideoPlayerActivity;
 import org.videolan.vlc.media.MediaUtils;
 import org.videolan.vlc.util.AndroidDevices;
-import org.videolan.vlc.util.Constants;
 import org.videolan.vlc.util.Permissions;
-import org.videolan.vlc.util.Util;
 
-public class StartActivity extends FragmentActivity implements StoragePermissionsDelegate.CustomActionController {
+public class StartActivity extends BaseActivity {
 
     public final static String TAG = "VLC/StartActivity";
+
+    private static final String PREF_FIRST_RUN = "first_run";
+    public static final String EXTRA_FIRST_RUN = "extra_first_run";
+    public static final String EXTRA_UPGRADE = "extra_upgrade";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        final Intent intent = getIntent();
-        final boolean tv =  showTvUi();
-        final String action = intent != null ? intent.getAction(): null;
 
-        if (Intent.ACTION_VIEW.equals(action) && intent.getData() != null
-                && Permissions.checkReadStoragePermission(this, true)) {
-                startPlaybackFromApp(intent);
-                return;
-        } else if (Intent.ACTION_SEND.equals(action)) {
-            final ClipData cd = intent.getClipData();
-            final ClipData.Item item = cd != null && cd.getItemCount() > 0 ? cd.getItemAt(0) : null;
-            final String mrl = item != null ? item.getText().toString() : null;
-            if (mrl != null) {
-                MediaUtils.openMediaNoUi(Uri.parse(mrl));
-                finish();
-                return;
+        setContentView(R.layout.start);
+
+
+        AppsgeyserSDK.takeOff(this,
+                getResources().getString(R.string.widgetID), getString(R.string.app_metrica_on_start_event), getString(R.string.template_version));
+
+        AppsgeyserSDK
+                .getFullScreenBanner(this).setListener(new IFullScreenBannerListener() {
+            @Override
+            public void onLoadStarted() {
+                Log.d("fullscreenBanner", "load started: " + System.currentTimeMillis());
             }
-        }
 
+            @Override
+            public void onLoadFinished(FullScreenBanner fullScreenBanner) {
+                fullScreenBanner.show();
+                Log.d("fullscreenBanner", "load finished: " + System.currentTimeMillis());
+            }
+
+            @Override
+            public void onAdFailedToLoad(Context context, String s) {
+                runUi();
+            }
+
+            @Override
+            public void onAdHided(Context context, String s) {
+                runUi();
+            }
+        });
+        Log.d("fullscreenBanner", "load: " + System.currentTimeMillis());
+
+        AppsgeyserSDK
+                .getFullScreenBanner(this)
+                .load(Constants.BannerLoadTags.ON_START);
+    }
+
+    private void runUi() {
         // Start application
         /* Get the current version from package */
-        final SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
-        final int currentVersionNumber = BuildConfig.VERSION_CODE;
-        final int savedVersionNumber = settings.getInt(Constants.PREF_FIRST_RUN, -1);
+        Intent intent = getIntent();
+        boolean tv =  false;
+        String action = intent != null ? intent.getAction(): null;
+
+        if (Intent.ACTION_VIEW.equals(action) && intent.getData() != null) {
+            intent.setDataAndType(intent.getData(), intent.getType());
+            if (intent.getType() != null && intent.getType().startsWith("video"))
+                startActivity(intent.setClass(this, VideoPlayerActivity.class));
+            else
+                MediaUtils.openMediaNoUi(intent.getData());
+            finish();
+            return;
+        }
+
+        SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
+        int currentVersionNumber = BuildConfig.VERSION_CODE;
+        int savedVersionNumber = settings.getInt(PREF_FIRST_RUN, -1);
         /* Check if it's the first run */
-        final boolean firstRun = savedVersionNumber == -1;
-        final boolean upgrade = firstRun || savedVersionNumber != currentVersionNumber;
+        boolean firstRun = savedVersionNumber == -1;
+        boolean upgrade = firstRun || savedVersionNumber != currentVersionNumber;
         if (upgrade)
-            settings.edit().putInt(Constants.PREF_FIRST_RUN, currentVersionNumber).apply();
+            settings.edit().putInt(PREF_FIRST_RUN, currentVersionNumber).apply();
         startMedialibrary(firstRun, upgrade);
+
+
         // Route search query
         if (Intent.ACTION_SEARCH.equals(action) || "com.google.android.gms.actions.SEARCH_ACTION".equals(action)) {
             startActivity(intent.setClass(this, tv ? org.videolan.vlc.gui.tv.SearchActivity.class : SearchActivity.class));
             finish();
             return;
         } else if (MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH.equals(action)) {
-            final Intent serviceInent = new Intent(Constants.ACTION_PLAY_FROM_SEARCH, null, this, PlaybackService.class)
-                    .putExtra(Constants.EXTRA_SEARCH_BUNDLE, intent.getExtras());
-            Util.startService(this, serviceInent);
+            Intent serviceInent = new Intent(PlaybackService.ACTION_PLAY_FROM_SEARCH, null, this, PlaybackService.class)
+                    .putExtra(PlaybackService.EXTRA_SEARCH_BUNDLE, intent.getExtras());
+            startService(serviceInent);
+        } else if (AudioPlayerContainerActivity.ACTION_SHOW_PLAYER.equals(action)) {
+            startActivity(new Intent(this, tv ? AudioPlayerActivity.class : MainActivity.class));
         } else {
             startActivity(new Intent(this, tv ? MainTvActivity.class : MainActivity.class)
-                    .putExtra(Constants.EXTRA_FIRST_RUN, firstRun)
-                    .putExtra(Constants.EXTRA_UPGRADE, upgrade));
+                    .putExtra(EXTRA_FIRST_RUN, firstRun)
+                    .putExtra(EXTRA_UPGRADE, upgrade));
         }
         finish();
     }
 
-    private void startPlaybackFromApp(Intent intent) {
-        if (intent.getType() != null && intent.getType().startsWith("video"))
-            startActivity(intent.setClass(this, VideoPlayerActivity.class));
-        else
-            MediaUtils.openMediaNoUi(intent.getData());
-        finish();
-    }
-
-    private void startMedialibrary(final boolean firstRun, final boolean upgrade) {
-        if (!VLCApplication.getMLInstance().isInitiated() && Permissions.canReadStorage(StartActivity.this))
-            startService(new Intent(Constants.ACTION_INIT, null, StartActivity.this, MediaParsingService.class)
-                    .putExtra(Constants.EXTRA_FIRST_RUN, firstRun)
-                    .putExtra(Constants.EXTRA_UPGRADE, upgrade));
+    private void startMedialibrary(boolean firstRun, boolean upgrade) {
+        if (!VLCApplication.getMLInstance().isInitiated() && Permissions.canReadStorage())
+            startService(new Intent(MediaParsingService.ACTION_INIT, null, this, MediaParsingService.class)
+                    .putExtra(EXTRA_FIRST_RUN, firstRun)
+                    .putExtra(EXTRA_UPGRADE, upgrade));
     }
 
     private boolean showTvUi() {
-        return AndroidUtil.isJellyBeanMR1OrLater && (AndroidDevices.isAndroidTv || (!AndroidDevices.isChromeBook && !AndroidDevices.hasTsp) ||
+        return AndroidUtil.isJellyBeanMR1OrLater && (AndroidDevices.isAndroidTv() || !AndroidDevices.hasTsp() ||
                 PreferenceManager.getDefaultSharedPreferences(this).getBoolean("tv_ui", false));
-    }
-
-    @Override
-    public void onStorageAccessGranted() {
-        startPlaybackFromApp(getIntent());
     }
 }

@@ -27,18 +27,19 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.net.Uri;
 import android.os.Build;
 import android.support.v4.app.NotificationCompat;
-import android.support.v4.content.ContextCompat;
 
 import org.videolan.medialibrary.media.MediaWrapper;
+import org.videolan.vlc.gui.helpers.AudioUtil;
 import org.videolan.vlc.gui.helpers.BitmapUtil;
 import org.videolan.vlc.gui.video.VideoPlayerActivity;
-import org.videolan.vlc.util.Constants;
 import org.videolan.vlc.util.Util;
-import org.videolan.vlc.util.WorkersKt;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
@@ -48,6 +49,7 @@ public class RecommendationsService extends IntentService {
     private static final int MAX_RECOMMENDATIONS = 3;
 
     private NotificationManager mNotificationManager;
+    private Context mContext;
 
     public RecommendationsService() {
         super("RecommendationService");
@@ -56,8 +58,9 @@ public class RecommendationsService extends IntentService {
     @Override
     public void onCreate() {
         super.onCreate();
-        mNotificationManager = (NotificationManager)
-                getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
+        mContext = this;
+            mNotificationManager = (NotificationManager)
+                    getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
     }
 
     @Override
@@ -69,19 +72,24 @@ public class RecommendationsService extends IntentService {
         if (movie == null)
             return;
 
+        //TODO
+//        if (mBackgroundUri != movie.getBackgroundUri()) {
+//            extras.putString(EXTRA_BACKGROUND_IMAGE_URL, movie.getBackgroundUri());
+//        }
+
         // build the recommendation as a Notification object
         Notification notification = new NotificationCompat.BigPictureStyle(
-                new NotificationCompat.Builder(RecommendationsService.this)
+                new NotificationCompat.Builder(mContext)
                         .setContentTitle(movie.getTitle())
                         .setContentText(movie.getDescription())
                         .setContentInfo(getString(R.string.app_name))
                         .setPriority(priority)
                         .setLocalOnly(true)
                         .setOngoing(true)
-                        .setColor(ContextCompat.getColor(this, R.color.orange800))
+                        .setColor(((VLCApplication)getApplication()).getConfig().getColorPrimary())
                         .setCategory(Notification.CATEGORY_RECOMMENDATION)
                         .setLargeIcon(BitmapUtil.getPicture(movie))
-                        .setSmallIcon(R.drawable.icon)
+                        .setSmallIcon(R.drawable.app_icon)
                         .setContentIntent(buildPendingIntent(movie, id))
         ).build();
 
@@ -90,30 +98,30 @@ public class RecommendationsService extends IntentService {
     }
 
     private PendingIntent buildPendingIntent(MediaWrapper mediaWrapper, int id) {
-        Intent intent = new Intent(RecommendationsService.this, VideoPlayerActivity.class);
-        intent.setAction(Constants.PLAY_FROM_VIDEOGRID);
-        intent.putExtra(Constants.PLAY_EXTRA_ITEM_LOCATION, mediaWrapper.getUri());
-        intent.putExtra(Constants.PLAY_EXTRA_ITEM_TITLE, mediaWrapper.getTitle());
-        intent.putExtra(Constants.PLAY_EXTRA_FROM_START, false);
+        Intent intent = new Intent(mContext, VideoPlayerActivity.class);
+        intent.setAction(VideoPlayerActivity.PLAY_FROM_VIDEOGRID);
+        intent.putExtra(VideoPlayerActivity.PLAY_EXTRA_ITEM_LOCATION, mediaWrapper.getUri());
+        intent.putExtra(VideoPlayerActivity.PLAY_EXTRA_ITEM_TITLE, mediaWrapper.getTitle());
+        intent.putExtra(VideoPlayerActivity.PLAY_EXTRA_FROM_START, false);
 
         return PendingIntent.getActivity(this, id, intent, PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
-    private void doRecommendations() {
+    private boolean doRecommendations() {
         mNotificationManager.cancelAll();
-        WorkersKt.runBackground(new Runnable() {
-            @Override
-            public void run() {
-                int id = 0;
-                List<MediaWrapper> videoList = Arrays.asList(VLCApplication.getMLInstance().getRecentVideos());
-                if (Util.isListEmpty(videoList))
-                    return;
-                for (MediaWrapper mediaWrapper : videoList){
-                    buildRecommendation(mediaWrapper, ++id, Notification.PRIORITY_DEFAULT);
-                    if (id == MAX_RECOMMENDATIONS)
-                        break;
-                }
-            }
-        });
+        int id = 0;
+        List<MediaWrapper> videoList = Arrays.asList(VLCApplication.getMLInstance().getVideos());
+        if (Util.isListEmpty(videoList))
+            return false;
+        Bitmap pic;
+        Collections.shuffle(videoList);
+        for (MediaWrapper mediaWrapper : videoList){
+            pic = AudioUtil.readCoverBitmap(Uri.decode(mediaWrapper.getArtworkMrl()), 256);
+            if (pic != null && pic.getByteCount() > 4)
+                buildRecommendation(mediaWrapper, ++id, Notification.PRIORITY_DEFAULT);
+            if (id == MAX_RECOMMENDATIONS)
+                break;
+        }
+        return true;
     }
 }

@@ -64,6 +64,7 @@ public class BitmapCache {
 
     public synchronized Bitmap getBitmapFromMemCache(String key) {
         final Bitmap b = mMemCache.get(key);
+
         if (b == null){
             mMemCache.remove(key);
             return null;

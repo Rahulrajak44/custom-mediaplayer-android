@@ -51,31 +51,31 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:clickable="true"
+        android:background="@{bgColor}"
         android:focusable="true"
         android:onClick="@{holder::onClick}"
         android:onLongClick="@{holder::onLongClick}"
         android:longClickable="true"
         android:paddingTop="5dp"
         android:paddingBottom="5dp"
-        android:background="@{bgColor}"
         android:orientation="horizontal">
-        <!-- Image loading is handled by org.videolan.vlc.gui.helpers.ImageLoader.loadImage() -->
+        <!-- Image loading is handled by org.videolan.vlc.gui.helpers.AsyncImageLoader.loadPicture() -->
         <ImageView
             android:id="@+id/ml_item_thumbnail"
             android:layout_width="120dp"
             android:layout_height="75dp"
             vlc:layout_constraintStart_toStartOf="parent"
             vlc:media="@{media}"
-            android:scaleType="centerCrop"
-            android:src="@{cover}" />
+            android:scaleType="fitXY"
+            android:background="@{cover}" />
 
         <ImageView
             android:id="@+id/ml_item_seen"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:src="@drawable/ic_seen_normal"
-            android:visibility="@{seen == 0L ? View.GONE : View.VISIBLE, default=gone}"
-            vlc:layout_constraintRight_toRightOf="@+id/ml_item_thumbnail"
+            android:visibility="@{seen == 0L ? View.GONE : View.VISIBLE}"
+            vlc:layout_constraintEnd_toEndOf="@+id/ml_item_thumbnail"
             vlc:layout_constraintTop_toTopOf="@+id/ml_item_thumbnail" />
 
         <TextView
@@ -87,6 +87,7 @@
             vlc:layout_constraintEnd_toStartOf="@+id/item_more"
             vlc:layout_constraintBottom_toTopOf="@+id/ml_item_resolution"
             android:ellipsize="end"
+            android:fontFamily="sans-serif-light"
             android:gravity="center_vertical"
             android:maxLines="2"
             android:paddingLeft="@dimen/half_default_margin"
@@ -115,13 +116,13 @@
             android:layout_height="wrap_content"
             vlc:layout_constraintStart_toEndOf="@+id/ml_item_thumbnail"
             vlc:layout_constraintBottom_toTopOf="@+id/ml_item_progress"
+            android:fontFamily="sans-serif-light"
             android:gravity="start"
             android:paddingLeft="@dimen/half_default_margin"
             android:paddingStart="@dimen/half_default_margin"
             android:text="@{time}"
-            android:fontFamily="sans-serif-light"
             android:layout_alignWithParentIfMissing="true"
-            android:textColor="?attr/list_title"
+            android:textColor="?attr/list_subtitle"
             android:textSize="14sp"
             tools:targetApi="jelly_bean" />
 
@@ -132,13 +133,13 @@
             vlc:layout_constraintBottom_toTopOf="@+id/ml_item_progress"
             vlc:layout_constraintStart_toEndOf="@+id/ml_item_time"
             vlc:layout_constraintEnd_toEndOf="parent"
+            android:paddingRight="@dimen/half_default_margin"
+            android:paddingEnd="@dimen/half_default_margin"
             android:layout_alignWithParentIfMissing="true"
-            android:paddingRight="12dp"
-            android:paddingEnd="12dp"
             android:fontFamily="sans-serif-light"
             android:gravity="end"
             android:text="@{resolution}"
-            android:textColor="?attr/list_title"
+            android:textColor="?attr/list_subtitle"
             android:textSize="14sp"
             tools:targetApi="jelly_bean" />
 
@@ -157,7 +158,6 @@
             android:maxHeight="1dip"
             android:minHeight="1dip"
             android:progress="@{progress}"
-            android:progressDrawable="?attr/gridview_progressbar"
             android:visibility="@{max == 0 ? View.INVISIBLE : View.VISIBLE}" />
     </android.support.constraint.ConstraintLayout>
 </layout>

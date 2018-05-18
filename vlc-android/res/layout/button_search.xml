@@ -2,7 +2,7 @@
 <Button xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/searchButton"
-    android:layout_width="wrap_content"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
     tools:targetApi="11"
     style="?android:attr/borderlessButtonStyle"
@@ -13,7 +13,7 @@
     android:layout_marginEnd="@dimen/default_margin"
     android:text="@string/search_global"
     android:gravity="center_horizontal"
-    android:textAppearance="@style/Result.Title"
     android:focusable="true"
+    android:textAllCaps="true"
     android:onClick="onClick"
     android:visibility="gone" />

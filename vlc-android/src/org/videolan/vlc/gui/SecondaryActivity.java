@@ -25,11 +25,9 @@ package org.videolan.vlc.gui;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.design.widget.AppBarLayout;
-import android.support.design.widget.CoordinatorLayout;
+import android.support.design.widget.Snackbar;
 import android.support.v4.app.Fragment;
 import android.view.MenuItem;
-import android.view.View;
 
 import org.videolan.medialibrary.Medialibrary;
 import org.videolan.vlc.MediaParsingService;
@@ -38,11 +36,9 @@ import org.videolan.vlc.VLCApplication;
 import org.videolan.vlc.gui.audio.AudioAlbumsSongsFragment;
 import org.videolan.vlc.gui.audio.AudioBrowserFragment;
 import org.videolan.vlc.gui.browser.StorageBrowserFragment;
-import org.videolan.vlc.gui.helpers.UiTools;
 import org.videolan.vlc.gui.preferences.PreferencesActivity;
 import org.videolan.vlc.gui.tv.TvUtil;
 import org.videolan.vlc.gui.video.VideoGridFragment;
-import org.videolan.vlc.util.Constants;
 
 public class SecondaryActivity extends ContentActivity {
     public final static String TAG = "VLC/SecondaryActivity";
@@ -62,32 +58,26 @@ public class SecondaryActivity extends ContentActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.secondary);
+
         initAudioPlayerContainerActivity();
-
-        final View fph = findViewById(R.id.fragment_placeholder);
-        final CoordinatorLayout.LayoutParams params =
-                (CoordinatorLayout.LayoutParams) fph.getLayoutParams();
-
-        if (VLCApplication.showTvUi()) {
-            TvUtil.INSTANCE.applyOverscanMargin(this);
-            params.topMargin = getResources().getDimensionPixelSize(UiTools.getResourceFromAttribute(this, R.attr.actionBarSize));
-        } else
-            params.setBehavior(new AppBarLayout.ScrollingViewBehavior());
-        fph.requestLayout();
-
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 
-        if (getSupportFragmentManager().findFragmentById(R.id.fragment_placeholder) == null) {
-            final String fragmentId = getIntent().getStringExtra(KEY_FRAGMENT);
+        if (getSupportFragmentManager().getFragments() == null) {
+            String fragmentId = getIntent().getStringExtra(KEY_FRAGMENT);
             fetchSecondaryFragment(fragmentId);
             if (mFragment == null){
                 finish();
                 return;
             }
             getSupportFragmentManager().beginTransaction()
-                    .add(R.id.fragment_placeholder, mFragment)
-                    .commit();
+            .add(R.id.fragment_placeholder, mFragment)
+            .commit();
+            if (VLCApplication.showTvUi() && STORAGE_BROWSER.equals(fragmentId))
+                Snackbar.make(getWindow().getDecorView(), R.string.tv_settings_hint, Snackbar.LENGTH_LONG).show();
         }
+
+        if (VLCApplication.showTvUi())
+            TvUtil.applyOverscanMargin(this);
     }
 
     @Override
@@ -108,7 +98,7 @@ public class SecondaryActivity extends ContentActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == ACTIVITY_RESULT_SECONDARY) {
             if (resultCode == PreferencesActivity.RESULT_RESCAN) {
-                startService(new Intent(Constants.ACTION_RELOAD, null,this, MediaParsingService.class));
+                startService(new Intent(MediaParsingService.ACTION_RELOAD, null,this, MediaParsingService.class));
             }
         }
     }
@@ -120,7 +110,7 @@ public class SecondaryActivity extends ContentActivity {
             case R.id.ml_menu_refresh:
                 Medialibrary ml = VLCApplication.getMLInstance();
                 if (!ml.isWorking())
-                    startService(new Intent(Constants.ACTION_RELOAD, null,this, MediaParsingService.class));
+                    startService(new Intent(MediaParsingService.ACTION_RELOAD, null,this, MediaParsingService.class));
                 return true;
         }
         return super.onOptionsItemSelected(item);

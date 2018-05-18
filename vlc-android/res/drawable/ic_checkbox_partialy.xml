@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@drawable/ic_checkbox_partialy_normal" android:state_focused="true" android:state_pressed="true"/>
-    <item android:drawable="@drawable/ic_checkbox_partialy_pressed" android:state_focused="true"/>
-    <item android:drawable="@drawable/ic_checkbox_partialy_pressed" android:state_pressed="true"/>
-    <item android:drawable="@drawable/ic_checkbox_partialy_normal"/>
+    <item android:drawable="@drawable/ic_indeterminate_check_box_white_24dp" android:state_focused="true" android:state_pressed="true"/>
+    <item android:drawable="@drawable/ic_indeterminate_check_box_white_24dp" android:state_focused="true"/>
+    <item android:drawable="@drawable/ic_indeterminate_check_box_white_24dp" android:state_pressed="true"/>
+    <item android:drawable="@drawable/ic_indeterminate_check_box_white_24dp"/>
+    <!--TODO-->
+
 </selector>

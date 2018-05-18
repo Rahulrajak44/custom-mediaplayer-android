@@ -68,9 +68,7 @@ mediaToMediaWrapper(JNIEnv* env, fields *fields, medialibrary::MediaPtr const& m
     unsigned int height = hasVideoTracks ? videoTracks.at(0)->height() : 0;
     int64_t duration = mediaPtr->duration();
     const medialibrary::IMediaMetadata& progressMeta = mediaPtr->metadata( medialibrary::IMedia::MetadataType::Progress );
-    int64_t progress = progressMeta.isSet() ? progressMeta.integer() : 0;
-    // workaround to convert legacy percentage progress
-    if (progress != 0 && progress < 100) progress = duration * ( progress / 100.0 );
+    int64_t progress = progressMeta.isSet() ? duration * ( progressMeta.integer() / 100.0 ) : 0;
     const medialibrary::IMediaMetadata& seenMeta =  mediaPtr->metadata( medialibrary::IMedia::MetadataType::Seen );
     int64_t seen = seenMeta.isSet() ? seenMeta.integer() : 0;
 
@@ -78,7 +76,7 @@ mediaToMediaWrapper(JNIEnv* env, fields *fields, medialibrary::MediaPtr const& m
                           (jlong) mediaPtr->id(), mrl,(jlong) progress, (jlong) duration, type,
                           title, artist, genre, album,
                           albumArtist, width, height, thumbnail,
-                          audioTrack, spuTrack, trackNumber, discNumber, (jlong) files.at(0)->lastModificationDate(), seen, mediaPtr->isThumbnailGenerated());
+                          audioTrack, spuTrack, trackNumber, discNumber, (jlong) files.at(0)->lastModificationDate(), seen);
     if (artist != NULL)
         env->DeleteLocalRef(artist);
     if (genre != NULL)
@@ -195,10 +193,10 @@ convertMediaSearchAggregateObject(JNIEnv* env, fields *fields, medialibrary::Med
         env->DeleteLocalRef(item);
     }
     return env->NewObject(fields->MediaSearchAggregate.clazz, fields->MediaSearchAggregate.initID,
-                          filteredArray(env, episodes, fields->MediaWrapper.clazz, epDrops),
-                          filteredArray(env, movies, fields->MediaWrapper.clazz, movieDrops),
-                          filteredArray(env, others, fields->MediaWrapper.clazz, othersDrops),
-                          filteredArray(env, tracks, fields->MediaWrapper.clazz, tracksDrops));
+                          filteredArray(env, fields, episodes, epDrops),
+                          filteredArray(env, fields, movies, movieDrops),
+                          filteredArray(env, fields, others, othersDrops),
+                          filteredArray(env, fields, tracks, tracksDrops));
 }
 
 jobject
@@ -254,7 +252,7 @@ convertHistoryItemObject(JNIEnv* env, fields *fields, medialibrary::HistoryPtr c
 }
 
 jobjectArray
-filteredArray(JNIEnv* env, jobjectArray array, jclass clazz, int removalCount)
+filteredArray(JNIEnv* env, fields *fields, jobjectArray array, int removalCount)
 {
     int size = -1, index = -1;
     if (removalCount == -1)
@@ -273,7 +271,7 @@ filteredArray(JNIEnv* env, jobjectArray array, jclass clazz, int removalCount)
         return array;
     if (size == -1)
         size = env->GetArrayLength(array);
-    jobjectArray mediaRefs = (jobjectArray) env->NewObjectArray(size-removalCount, clazz, NULL);
+    jobjectArray mediaRefs = (jobjectArray) env->NewObjectArray(size-removalCount, fields->MediaWrapper.clazz, NULL);
     for (int i = 0; i<size; ++i)
     {
         jobject item = env->GetObjectArrayElement(array, i);

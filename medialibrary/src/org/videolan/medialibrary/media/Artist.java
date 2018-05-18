@@ -5,7 +5,6 @@ import android.os.Parcelable;
 
 import org.videolan.libvlc.util.VLCUtil;
 import org.videolan.medialibrary.Medialibrary;
-import org.videolan.medialibrary.R;
 
 public class Artist extends MediaLibraryItem {
 
@@ -13,21 +12,11 @@ public class Artist extends MediaLibraryItem {
     private String artworkMrl;
     private String musicBrainzId;
 
-    static class SpecialRes {
-        static String UNKNOWN_ARTIST = Medialibrary.getContext().getString(R.string.unknown_artist);
-        static String VARIOUS_ARTISTS = Medialibrary.getContext().getString(R.string.various_artists);
-    }
-
     public Artist(long id, String name, String shortBio, String artworkMrl, String musicBrainzId) {
         super(id, name);
         this.shortBio = shortBio;
         this.artworkMrl = artworkMrl != null ? VLCUtil.UriFromMrl(artworkMrl).getPath() : null;
         this.musicBrainzId = musicBrainzId;
-        if (id == 1L) {
-            mTitle = SpecialRes.UNKNOWN_ARTIST;
-        } else if (id == 2L) {
-            mTitle = SpecialRes.VARIOUS_ARTISTS;
-        }
     }
 
     public String getShortBio() {
@@ -51,21 +40,13 @@ public class Artist extends MediaLibraryItem {
     }
 
     public Album[] getAlbums() {
-        return getAlbums(Medialibrary.SORT_DEFAULT, false);
-    }
-
-    public Album[] getAlbums(int sort, boolean desc) {
-        final Medialibrary ml = Medialibrary.getInstance();
-        return ml != null && ml.isInitiated() ? nativeGetAlbumsFromArtist(ml, mId, sort, desc) : new Album[0];
+        Medialibrary ml = Medialibrary.getInstance();
+        return ml != null && ml.isInitiated() ? nativeGetAlbumsFromArtist(ml, mId) : new Album[0];
     }
 
     public MediaWrapper[] getTracks() {
-        return getTracks(Medialibrary.SORT_DEFAULT, false);
-    }
-
-    public MediaWrapper[] getTracks(int sort, boolean desc) {
-        final Medialibrary ml = Medialibrary.getInstance();
-        return ml != null && ml.isInitiated() ? nativeGetMediaFromArtist(ml, mId, sort, desc) : Medialibrary.EMPTY_COLLECTION;
+        Medialibrary ml = Medialibrary.getInstance();
+        return ml != null && ml.isInitiated() ? nativeGetMediaFromArtist(ml, mId) : Medialibrary.EMPTY_COLLECTION;
     }
 
     @Override
@@ -73,8 +54,8 @@ public class Artist extends MediaLibraryItem {
         return TYPE_ARTIST;
     }
 
-    private native Album[] nativeGetAlbumsFromArtist(Medialibrary ml, long mId, int sort, boolean desc);
-    private native MediaWrapper[] nativeGetMediaFromArtist(Medialibrary ml, long mId, int sort, boolean desc);
+    private native Album[] nativeGetAlbumsFromArtist(Medialibrary ml, long mId);
+    private native MediaWrapper[] nativeGetMediaFromArtist(Medialibrary ml, long mId);
 
     @Override
     public void writeToParcel(Parcel parcel, int i) {
