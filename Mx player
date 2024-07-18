@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<template>
+    <title>MX Player</title>
+    <description>
+        Introducing MX Player, the ultimate Android Video Player that supports all popular Video Formats. Download MX Player’s official app now to enjoy seamless 8K / 4K Ultra HD / HD video playback with our state-of-the-art advanced Hybrid Hardware Acceleration (HW / HW+) technology. In addition, get access to a vast collection of free movies in various languages, TV shows, MX Original & Exclusive shows, web series, music videos, and much more.
+    </description>
+    <content>
+        <performance>
+            <title>Unmatched Performance</title>
+            <description>MX Player unleashes the full potential of your device’s multi-core chipset, providing an impressive 70% boost in decoding performance.</description>
+        </performance>
+        <control>
+            <title>Advanced Gesture Control</title>
+            <description>With a simple touch, you can easily control various functions such as volume, brightness, video seeking, zoom and pan, fast-forwarding, rewinding, playback speed adjustment, subtitle-based seeking, and even resize or reposition subtitles.</description>
+        </control>
+        <multitasking>
+            <title>Seamless Multitasking</title>
+            <description>Multitasking has never been easier with MX Player. Whether replying to your messages or performing other tasks, MX Player's android video player offers a fully customizable floating window and Picture-in-Picture (PIP) mode, ensuring uninterrupted viewing.</description>
+        </multitasking>
+        <customization>
+            <title>Customization at its Best</title>
+            <description>Customization is at the heart of MX Player. Make it truly your own by tailoring your experience to perfection starting from User Interface to fine-tuning of playback controls.</description>
+        </customization>
+    </content>
+    <subtitles>
+        <title>Superior Subtitle Support</title>
+        <formats>
+            <format>SubRip(.srt)</format>
+            <format>SubStation Alpha(.ssa/.ass)</format>
+            <format>VobSub(.sub/.idx)</format>
+            <format>Text(.txt)</format>
+            <format>WebVTT(.vtt)</format>
+            <format>SAMI(.smi)</format>
+            <format>MicroDVD(.sub)</format>
+            <format>SubViewer2.0(.sub)</format>
+            <format>DVD, DVB Subtitles</format>
+            <format>MPL2(.mpl)</format>
+            <format>Teletext</format>
+            <format>PJS(.pjs)</format>
+        </formats>
+    </subtitles>
+    <key_features>
+        <feature>
+            <title>HD Music Player</title>
+            <description>A stylish music player, crafted exclusively for audiophiles and offers an immersive listening experience</description>
+        </feature>
+        <feature>
+            <title>Night Mode</title>
+            <description>Enjoy watching videos in low light without straining your eyes in an amazing video player.</description>
+        </feature>
+        <feature>
+            <title>Equalizer / Bass Booster</title>
+            <description>Experience a more immersive audio experience by customizing the audio output to your liking with the built-in Equalizer and Bass Booster.</description>
+        </feature>
+        <feature>
+            <title>Video Cutter</title>
+            <description>Trim your videos like a pro and share them with your friends.</description>
+        </feature>
+        <feature>
+            <title>MP3 Converter</title>
+            <description>Extract audio tracks from your favourite videos and save them as MP3 file.</description>
+        </feature>
+        <feature>
+            <title>Local Network</title>
+            <description>Access and play files stored on your computer or NAS using Samba (SMBv2) protocol.</description>
+        </feature>
+        <feature>
+            <title>Video Downloader</title>
+            <description>Save your favourite videos from popular social media channels like Facebook, WhatsApp, Instagram, & more.</description>
+        </feature>
+        <feature>
+            <title>Subtitle Translator & Downloader</title>
+            <description>AI Translation option translates the subtitles to your preferred language. This option supports only the external .SRT subtitles files.</description>
+        </feature>
+        <feature>
+            <title>Lyrics Downloader</title>
+            <description>Save lyrics of your favourite songs, music files on your device at time.</description>
+        </feature>
+    </key_features>
+    <ott_features>
+        <title>What MX Player OTT feature offers</title>
+        <description>With over 2,00,000 Hours of content, MX Player is a one-stop solution for your daily dose of entertainment.</description>
+        <content>
+            <category>
+                <title>Binge Watch Popular Bollywood Movies</title>
+                <examples>Jalebi, Hate Story, Flesh, Vikram Vedha & lot more</examples>
+            </category>
+            <category>
+                <title>Best Korean Web Series, Turkish dramas in Hindi</title>
+                <examples>Melting Heart, The Tale of Nokdu, Love Is In The Air, Love O2O etc.</examples>
+            </category>
+            <category>
+                <title>Web Series</title>
+                <examples>Paro, Viram, Parshuram, Cyanide & more in Hindi, Telugu, Tamil, Kannada, Marathi, Bengali & English</examples>
+            </category>
+            <category>
+                <title>MX Originals</title>
+                <examples>Aashram, Dharavi Bank, Shiksha Mandal, Tu Zakhm Hai etc.</examples>
+            </category>
+            <category>
+                <title>Top International content</title>
+                <description>Watch movies & web series filled with drama, thrills, action, romance & comedy dubbed in regional languages.</description>
+            </category>
+        </content>
+    </ott_features>
+    <permissions>
+        <required>
+            <permission>Storage / All Files Access: Necessary to scan and access all media files and subtitles on primary and external storage, including those not supported by Android Media Scanner.</permission>
+        </required>
+        <optional>
+            <permission>Microphone: Required for voice search</permission>
+            <permission>Draw over other apps: Needed to enable video playback in a customizable floating window</permission>
+            <permission>Bluetooth: Necessary to adjust AV sync based on Bluetooth latency automatically</permission>
+        </optional>
+        <for_mx_share>
+            <permission>Location: Necessary for locating nearby friends using Wi-Fi Direct</permission>
+            <permission>Camera: Required to share files by scanning QR codes</permission>
+        </for_mx_share>
+    </permissions>
+</template>
